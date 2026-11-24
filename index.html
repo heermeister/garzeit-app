@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meat again</title>
+  <meta name="description" content="Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton.">
+  <meta name="theme-color" content="#1b1310">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Meat again">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="kopf">
+    <h1>🥩 Meat again</h1>
+    <p class="unter">Garzeit-Timer</p>
+  </header>
+
+  <!-- ───────── Auswahl ───────── -->
+  <main id="auswahl" class="ansicht">
+    <section class="block">
+      <h2>1 · Fleisch</h2>
+      <div id="fleisch-liste" class="karten"></div>
+    </section>
+
+    <section class="block">
+      <h2>2 · Dicke <span id="dicke-wert" class="wert"></span></h2>
+      <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
+      <div class="skala"><span>1 cm</span><span>6 cm</span></div>
+    </section>
+
+    <section class="block">
+      <h2>3 · Garstufe</h2>
+      <div id="stufen-liste" class="chips"></div>
+      <p id="sicher-info" class="info sicher" hidden>
+        🛡️ Nur „sicher durch“: Kern mindestens <b>70 °C für 2 Minuten</b> (BfR). Die App führt dich durch Herausnehmen bei 72 °C, Haltephase und Kontrollmessung.
+      </p>
+      <p id="risiko-info" class="info warn" hidden>
+        ⚠️ Für <b>Schwangere, Kleinkinder, ältere und immungeschwächte Menschen</b> wird mindestens 63 °C empfohlen (USDA-Mindestwert für ganze Stücke).
+      </p>
+    </section>
+
+    <section class="block">
+      <h2>4 · Ausgangslage</h2>
+      <div id="start-liste" class="chips"></div>
+      <div id="geraet-liste" class="chips"></div>
+      <p id="geraet-info" class="info" hidden></p>
+    </section>
+
+    <section class="block plan" aria-live="polite">
+      <div class="plan-zeile"><span>Garzeit ca.</span><b id="p-gar"></b></div>
+      <div class="plan-zeile"><span>Pro Seite</span><b id="p-seite"></b></div>
+      <div class="plan-zeile"><span>Herausnehmen bei</span><b id="p-raus"></b></div>
+      <div class="plan-zeile"><span>Ruhezeit</span><b id="p-ruhe"></b></div>
+      <div class="plan-zeile"><span>Ziel auf dem Teller</span><b id="p-ziel"></b></div>
+      <p class="klein">Zeiten sind Schätzungen (noch nicht geeicht) – das Thermometer entscheidet.</p>
+    </section>
+
+    <button id="start" class="gross primaer">▶️ Pfanne ist heiß – los!</button>
+  </main>
+
+  <!-- ───────── Timer ───────── -->
+  <main id="timer" class="ansicht" hidden>
+    <p id="t-fleisch" class="t-fleisch"></p>
+    <p id="t-schritt" class="t-schritt"></p>
+    <h2 id="t-titel" class="t-titel"></h2>
+    <div id="t-zeit" class="t-zeit" role="timer" aria-live="off"></div>
+    <div class="balken"><div id="t-balken"></div></div>
+    <p id="t-text" class="t-text"></p>
+
+    <div id="t-check" class="t-check" hidden>
+      <p id="t-frage" class="t-frage"></p>
+      <div class="zwei">
+        <button id="t-ja" class="gross primaer">✅ Ja</button>
+        <button id="t-nein" class="gross">⏳ Noch nicht</button>
+      </div>
+    </div>
+
+    <div id="t-steuer" class="zwei">
+      <button id="t-pause" class="gross">⏸️ Pause</button>
+      <button id="t-weiter" class="gross">⏭️ Weiter</button>
+    </div>
+    <p id="t-naechst" class="klein"></p>
+    <button id="t-abbruch" class="text-knopf">✖ Abbrechen</button>
+    <p id="t-wake" class="klein warn-text" hidden>⚠️ Bildschirm-Sperre konnte nicht verhindert werden – bitte Bildschirm anlassen, sonst kommen die Signale evtl. nicht.</p>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

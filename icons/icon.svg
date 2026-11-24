@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="0" fill="#1b1310"/>
+  <!-- Steak -->
+  <path d="M150 170c40-60 150-70 220-30 60 34 70 110 30 160-36 46-90 52-130 80-40 28-110 20-135-30-22-44 10-80 0-120-6-24-3-40 15-60z"
+        fill="#f1dccd"/>
+  <path d="M168 182c36-48 132-56 192-22 50 28 58 92 24 134-32 40-80 46-116 70-36 24-96 18-116-24-18-38 10-70 2-104-5-22-3-36 14-54z"
+        fill="#b3361e"/>
+  <!-- Timer-Ring -->
+  <circle cx="268" cy="262" r="62" fill="none" stroke="#f4ece7" stroke-width="18"/>
+  <path d="M268 262V222M268 262l28 18" stroke="#f4ece7" stroke-width="16" stroke-linecap="round"/>
+</svg>

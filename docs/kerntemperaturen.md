@@ -1,7 +1,12 @@
 # 🌡️ Meat again – Referenztabelle Kerntemperaturen (Etappe 1)
 
-> **Status: ENTWURF – fachliche Freigabe ausstehend.**
-> Diese Tabelle ist die Datengrundlage der App. Erst nach Freigabe wird sie in den Code übernommen.
+> **Status: FACHLICH FREIGEGEBEN (24.11.2026).**
+> Diese Tabelle ist die Datengrundlage der App (`js/data.js`).
+>
+> **Entscheidungen:**
+> - **F1:** Rare und medium rare bei Rind und Lamm sind frei wählbar, **mit Hinweis** für Risikogruppen.
+> - **F2:** **Variante B:** Herausnehmen bei ≥ 72 °C, 2 Minuten Haltephase während der Ruhezeit, danach Kontrollmessung ≥ 70 °C.
+> - **F3:** Die Zielwerte für Rind und Lamm werden wie vorgeschlagen übernommen.
 
 ## 1. Grundprinzip
 
@@ -59,7 +64,7 @@ Bei diesen Stücken gibt es **keine Garstufen-Auswahl**, sondern nur „sicher d
 
 📐 **Hinweis zur Formel:** Die REWE-Faustregel ist *linear* (Zeit ∝ Dicke), die Wärmeleitung spricht eher für *quadratisch* (Zeit ∝ Dicke²). Die Testbraten in drei Dicken sollen genau das klären.
 
-## 5. Offene Fragen an die fachliche Freigabe
+## 5. Fragen zur fachlichen Freigabe (beantwortet, siehe oben)
 
 - **F1 – Rind und Lamm unter 63 °C:** Die übliche Begründung ist, dass Keime bei intakten ganzen Muskelstücken vorwiegend an der Oberfläche sitzen und beim Anbraten abgetötet werden. Sollen rare und medium rare also frei wählbar sein, ggf. mit einem Hinweis für Schwangere, Kleinkinder und Immungeschwächte?
 - **F2 – Umsetzung der 2-Minuten-Haltephase bei Schwein und Geflügel:**

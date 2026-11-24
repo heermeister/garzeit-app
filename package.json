@@ -1,0 +1,10 @@
+{
+  "name": "meat-again",
+  "private": true,
+  "type": "module",
+  "description": "Garzeit-Timer für Fleisch – Hobbyprojekt",
+  "scripts": {
+    "test": "node --test",
+    "start": "python3 -m http.server 8080"
+  }
+}
