@@ -1,7 +1,7 @@
 // Meat again – Datengrundlage
 // Quelle und fachliche Freigabe: docs/kerntemperaturen.md
 
-/** Garstufen für Genuss-Fleisch (Rind, Lamm). target = Kerntemperatur nach der Ruhezeit (°C). */
+/** Garstufen. target = Kerntemperatur nach der Ruhezeit (°C). */
 export const STUFEN = {
   rare:        { label: 'Rare',        sub: 'blutig' },
   mediumRare:  { label: 'Medium rare', sub: 'rosa, saftig' },
@@ -14,8 +14,15 @@ export const STUFEN = {
 /** Unter diesem Zielwert erscheint der Hinweis für Risikogruppen (USDA-Mindestwert für ganze Stücke). */
 export const RISIKO_GRENZE = 63;
 
-/** Sicherheitsregel (BfR, Variante B): herausnehmen bei ≥ 72 °C, 2 Min. halten, Kontrolle ≥ 70 °C. */
-export const SICHER = { pull: 72, hold: 70, holdSec: 120 };
+/**
+ * Sicherheitsregel (BfR, freigegeben als Variante B):
+ * herausnehmen bei ≥ 72 °C, 2 Min. Haltephase, Kontrollmessung ≥ 70 °C.
+ * Diese Werte werden NIE durch persönliche Anpassung oder Kalibrierung verändert.
+ */
+export const SICHER = Object.freeze({ pull: 72, hold: 70, holdSec: 120 });
+
+/** Persönliche Anpassung der Genuss-Zielwerte: maximal ± so viele °C. */
+export const ANPASSUNG_MAX = 4;
 
 export const FLEISCH = [
   {
@@ -55,14 +62,33 @@ export const FLEISCH = [
   },
 ];
 
-export const GERAETE = [
-  { id: 'pfanne',    name: 'Pfanne',    emoji: '🍳', faktor: 1.0 },
-  { id: 'gasgrill',  name: 'Gasgrill (direkt)',  emoji: '🔥', faktor: 1.0 },
-  { id: 'holzkohle', name: 'Holzkohle (direkt)', emoji: '⚫', faktor: 1.0,
+/** Gerätetypen (Version 1: nur direkte Hitze). */
+export const GERAETE_TYPEN = {
+  pfanne:    { name: 'Pfanne',             emoji: '🍳', ort: 'Pfanne', rein: 'ins heiße Fett legen' },
+  gasgrill:  { name: 'Gasgrill (direkt)',  emoji: '🔥', ort: 'Grill',  rein: 'auf den heißen Rost legen' },
+  holzkohle: { name: 'Holzkohle (direkt)', emoji: '⚫', ort: 'Grill',  rein: 'auf den heißen Rost legen',
     hinweis: 'Holzkohle schwankt stark – Zeit nur grob, Thermometer entscheidet.' },
+};
+
+/** Start-Profile; der Nutzer kann eigene anlegen. faktor wird durch Kalibrierung gelernt. */
+export const STANDARD_GERAETE = [
+  { id: 'pfanne',    name: 'Pfanne',    typ: 'pfanne',    faktor: 1, lernSchritte: 0 },
+  { id: 'gasgrill',  name: 'Gasgrill',  typ: 'gasgrill',  faktor: 1, lernSchritte: 0 },
+  { id: 'holzkohle', name: 'Holzkohle', typ: 'holzkohle', faktor: 1, lernSchritte: 0 },
 ];
 
 export const START = [
   { id: 'kalt',       name: 'Aus dem Kühlschrank', emoji: '❄️', temp: 5 },
   { id: 'temperiert', name: 'Temperiert',          emoji: '🌡️', temp: 15 },
 ];
+
+/** Farb-Labels für mehrere Stücke gleichzeitig. */
+export const FARBEN = [
+  { id: 'gruen',  name: 'Grün',  punkt: '🟢', css: '#2e9e5b' },
+  { id: 'blau',   name: 'Blau',  punkt: '🔵', css: '#2f6fd6' },
+  { id: 'orange', name: 'Orange', punkt: '🟠', css: '#e07a1f' },
+  { id: 'lila',   name: 'Lila',  punkt: '🟣', css: '#8a4fd1' },
+  { id: 'gelb',   name: 'Gelb',  punkt: '🟡', css: '#c9a400' },
+  { id: 'rot',    name: 'Rot',   punkt: '🔴', css: '#d23a2a' },
+];
+export const MAX_STUECKE = FARBEN.length;

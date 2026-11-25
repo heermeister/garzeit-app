@@ -4,30 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Meat again</title>
-  <meta name="description" content="Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton.">
+  <meta name="description" content="Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton, auch für mehrere Stücke gleichzeitig.">
   <meta name="theme-color" content="#1b1310">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Meat again">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header class="kopf">
-    <h1>🥩 Meat again</h1>
-    <p class="unter">Garzeit-Timer</p>
+    <button id="nav-home" type="button" class="logo" aria-label="Zur Auswahl">
+      <span class="logo-titel">🥩 Meat again</span><span class="unter">Garzeit-Timer</span>
+    </button>
+    <nav class="nav">
+      <button id="nav-messungen" type="button" class="nav-knopf" aria-label="Messungen">📊</button>
+      <button id="nav-einstellungen" type="button" class="nav-knopf" aria-label="Einstellungen">⚙️</button>
+    </nav>
   </header>
 
-  <!-- ───────── Auswahl ───────── -->
-  <main id="auswahl" class="ansicht">
+  <!-- ═════════ Auswahl ═════════ -->
+  <main id="v-auswahl" class="ansicht">
+    <p id="ios-banner" class="info" hidden>
+      📲 <b>Tipp fürs iPhone:</b> In Safari auf <b>Teilen ⬆️ → „Zum Home-Bildschirm“</b> tippen und die App immer von dort starten. Nur so bleibt der Bildschirm zuverlässig an.
+    </p>
+    <p id="mess-badge" class="info mess" hidden>🧪 <b>Mess-Modus aktiv</b>: Bitte Temperaturen eintragen, wann immer die App danach fragt.</p>
+
     <section class="block">
       <h2>1 · Fleisch</h2>
       <div id="fleisch-liste" class="karten"></div>
     </section>
 
     <section class="block">
-      <h2>2 · Dicke <span id="dicke-wert" class="wert"></span></h2>
+      <h2><span>2 · Dicke</span> <span id="dicke-wert" class="wert"></span></h2>
       <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
       <div class="skala"><span>1 cm</span><span>6 cm</span></div>
     </section>
@@ -35,6 +47,7 @@
     <section class="block">
       <h2>3 · Garstufe</h2>
       <div id="stufen-liste" class="chips"></div>
+      <p id="anpass-info" class="klein" hidden></p>
       <p id="sicher-info" class="info sicher" hidden>
         🛡️ Nur „sicher durch“: Kern mindestens <b>70 °C für 2 Minuten</b> (BfR). Die App führt dich durch Herausnehmen bei 72 °C, Haltephase und Kontrollmessung.
       </p>
@@ -46,8 +59,13 @@
     <section class="block">
       <h2>4 · Ausgangslage</h2>
       <div id="start-liste" class="chips"></div>
+      <label id="tstart-feld" class="feld" hidden>
+        <span>🌡️ Kerntemperatur vor dem Start <small>(Mess-Modus, optional)</small></span>
+        <input id="tstart" type="number" inputmode="decimal" step="0.5" min="-20" max="40" placeholder="z. B. 6">
+      </label>
+      <h3 class="unter-h">Gerät</h3>
       <div id="geraet-liste" class="chips"></div>
-      <p id="geraet-info" class="info" hidden></p>
+      <p id="geraet-info" class="info warn" hidden></p>
     </section>
 
     <section class="block plan" aria-live="polite">
@@ -56,37 +74,100 @@
       <div class="plan-zeile"><span>Herausnehmen bei</span><b id="p-raus"></b></div>
       <div class="plan-zeile"><span>Ruhezeit</span><b id="p-ruhe"></b></div>
       <div class="plan-zeile"><span>Ziel auf dem Teller</span><b id="p-ziel"></b></div>
-      <p class="klein">Zeiten sind Schätzungen (noch nicht geeicht) – das Thermometer entscheidet.</p>
+      <p id="p-faktor" class="klein" hidden></p>
+      <p class="klein">Zeiten sind Schätzungen – das Thermometer entscheidet.</p>
     </section>
 
-    <button id="start" class="gross primaer">▶️ Pfanne ist heiß – los!</button>
-  </main>
-
-  <!-- ───────── Timer ───────── -->
-  <main id="timer" class="ansicht" hidden>
-    <p id="t-fleisch" class="t-fleisch"></p>
-    <p id="t-schritt" class="t-schritt"></p>
-    <h2 id="t-titel" class="t-titel"></h2>
-    <div id="t-zeit" class="t-zeit" role="timer" aria-live="off"></div>
-    <div class="balken"><div id="t-balken"></div></div>
-    <p id="t-text" class="t-text"></p>
-
-    <div id="t-check" class="t-check" hidden>
-      <p id="t-frage" class="t-frage"></p>
-      <div class="zwei">
-        <button id="t-ja" class="gross primaer">✅ Ja</button>
-        <button id="t-nein" class="gross">⏳ Noch nicht</button>
+    <section class="block teller">
+      <h2><span>5 · Mehrere Stücke? <small class="normal">(optional)</small></span></h2>
+      <div class="name-zeile">
+        <input id="name" type="text" maxlength="14" placeholder="Für wen? z. B. Papa" aria-label="Name für dieses Stück" autocomplete="off">
+        <button id="hinzu" type="button" class="mittel">➕ Hinzufügen</button>
       </div>
-    </div>
+      <ul id="teller-liste" class="teller-liste"></ul>
+      <div id="teller-plan" class="teller-plan" hidden></div>
+      <p id="teller-hinweis" class="klein">Für ein einzelnes Stück einfach direkt starten.</p>
+    </section>
 
-    <div id="t-steuer" class="zwei">
-      <button id="t-pause" class="gross">⏸️ Pause</button>
-      <button id="t-weiter" class="gross">⏭️ Weiter</button>
-    </div>
-    <p id="t-naechst" class="klein"></p>
-    <button id="t-abbruch" class="text-knopf">✖ Abbrechen</button>
-    <p id="t-wake" class="klein warn-text" hidden>⚠️ Bildschirm-Sperre konnte nicht verhindert werden – bitte Bildschirm anlassen, sonst kommen die Signale evtl. nicht.</p>
+    <button id="start" type="button" class="gross primaer">▶️ Los!</button>
+    <button id="test-schnell" type="button" class="text-knopf">🔔 Signal testen</button>
   </main>
+
+  <!-- ═════════ Timer ═════════ -->
+  <main id="v-timer" class="ansicht" hidden>
+    <section id="held" class="held" aria-live="polite">
+      <p id="h-wer" class="h-wer"></p>
+      <h2 id="h-titel" class="h-titel"></h2>
+      <div id="h-zeit" class="h-zeit" role="timer"></div>
+    </section>
+    <div id="stuecke" class="stuecke"></div>
+    <div id="t-steuer" class="zwei">
+      <button id="t-pause" type="button" class="gross">⏸️ Pause</button>
+      <button id="t-abbruch" type="button" class="gross">✖ Abbrechen</button>
+    </div>
+    <button id="t-neu" type="button" class="gross primaer" hidden>↩︎ Neues Essen</button>
+    <p id="t-wake" class="info warn" hidden></p>
+  </main>
+
+  <!-- ═════════ Einstellungen ═════════ -->
+  <main id="v-einstellungen" class="ansicht" hidden>
+    <h2 class="seiten-titel">⚙️ Einstellungen</h2>
+
+    <section class="block">
+      <h2>🔔 Signal-Test</h2>
+      <p class="klein">Vor dem ersten Braten testen: Hörst du den Piepton und die Ansage?</p>
+      <button id="test-signal" type="button" class="gross">🔔 Signal jetzt testen</button>
+      <ul id="test-ergebnis" class="status-liste" hidden></ul>
+    </section>
+
+    <section class="block">
+      <h2>🧪 Mess-Modus</h2>
+      <label class="schalter">
+        <input id="opt-mess" type="checkbox">
+        <span>Für Testbraten: fragt die Kerntemperatur vor dem Start, bei jeder Messung und nach der Ruhezeit ab. Alles landet in 📊 Messungen und kann als CSV exportiert werden.</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🔁 Automatisch lernen</h2>
+      <label class="schalter">
+        <input id="opt-lernen" type="checkbox">
+        <span>Wenn du beim Messen die Temperatur einträgst, passt die App die Zeiten für das jeweilige Gerät an.</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🍳 Meine Geräte</h2>
+      <ul id="geraete-liste" class="geraete-liste"></ul>
+      <div class="geraet-neu">
+        <input id="geraet-name" type="text" maxlength="24" placeholder="Name, z. B. Gusseisen groß" aria-label="Name des Geräts" autocomplete="off">
+        <select id="geraet-typ" aria-label="Gerätetyp"></select>
+        <button id="geraet-hinzu" type="button" class="mittel">➕ Anlegen</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>🎚️ Mein Gargrad</h2>
+      <p class="klein">Deine Rückmeldung „zu roh / zu durch“ verschiebt die Zielwerte für Rind und Lamm um je 1 °C (max. ± 4 °C). Schwein und Geflügel bleiben immer bei der Sicherheitsregel.</p>
+      <ul id="anpass-liste" class="status-liste"></ul>
+      <button id="anpass-reset" type="button" class="mittel">↺ Alle zurücksetzen</button>
+    </section>
+
+    <p class="klein mitte">Alle Daten bleiben nur auf diesem Gerät.</p>
+  </main>
+
+  <!-- ═════════ Messungen ═════════ -->
+  <main id="v-messungen" class="ansicht" hidden>
+    <h2 class="seiten-titel">📊 Messungen</h2>
+    <p id="m-anzahl" class="klein"></p>
+    <div class="zwei">
+      <button id="m-export" type="button" class="gross primaer">📤 CSV exportieren</button>
+      <button id="m-loeschen" type="button" class="gross">🗑️ Alle löschen</button>
+    </div>
+    <ul id="m-liste" class="m-liste"></ul>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

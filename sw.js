@@ -1,7 +1,7 @@
 // Meat again – Service Worker: online immer aktuell, offline aus dem Cache
-const CACHE = 'meatagain-v1';
+const CACHE = 'meatagain-v2';
 const DATEIEN = [
-  './', 'index.html', 'css/styles.css', 'js/app.js', 'js/model.js', 'js/data.js',
+  './', 'index.html', 'css/styles.css', 'js/app.js', 'js/model.js', 'js/data.js', 'js/speicher.js', 'js/signale.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png',
 ];
 

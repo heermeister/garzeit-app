@@ -5,6 +5,7 @@
   "description": "Garzeit-Timer für Fleisch – Hobbyprojekt",
   "scripts": {
     "test": "node --test",
+    "e2e": "node tests/e2e.cjs",
     "start": "python3 -m http.server 8080"
   }
 }

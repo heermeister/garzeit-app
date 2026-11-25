@@ -1,44 +1,66 @@
 // Ausführen mit: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FLEISCH, GERAETE, START, SICHER } from '../js/data.js';
-import { berechne, ablauf, nachgaren } from '../js/model.js';
+import { FLEISCH, START, SICHER, STANDARD_GERAETE, ANPASSUNG_MAX } from '../js/data.js';
+import {
+  berechne, ablauf, nachgaren, zusatzzeit, kalibriere, neueAnpassung, zeitplan, csv, fmt,
+  NACHBRATEN_SEK, ZUSATZ_MIN_SEK, ZUSATZ_MAX_SEK, FAKTOR_MIN, FAKTOR_MAX,
+} from '../js/model.js';
 
 const f = (id) => FLEISCH.find((x) => x.id === id);
-const pfanne = GERAETE[0];
+const pfanne = STANDARD_GERAETE[0];
 const [kalt, temperiert] = START;
+const basis = (x = {}) => ({ fleisch: f('rumpsteak'), stufe: 'medium', dicke: 2.5, tStart: temperiert.temp, geraet: pfanne, ...x });
 
-test('Referenzfall: Rumpsteak 2,5 cm, medium rare, temperiert, Pfanne ≈ 6 Min.', () => {
-  const p = berechne({ fleisch: f('rumpsteak'), stufe: 'mediumRare', dicke: 2.5, start: temperiert, geraet: pfanne });
+test('Referenzfall: Rumpsteak 2,5 cm, medium rare, temperiert, Pfanne = 6 Min.', () => {
+  const p = berechne(basis({ stufe: 'mediumRare' }));
   assert.equal(p.garSek, 360);
   assert.equal(p.raus, 52);
   assert.equal(p.ziel, 54);
   assert.equal(p.risiko, true);
 });
 
-test('Dickeres Fleisch, höhere Garstufe und Kühlschrank brauchen jeweils länger', () => {
-  const basis = { fleisch: f('rumpsteak'), stufe: 'medium', dicke: 2.5, start: temperiert, geraet: pfanne };
-  const t = (x) => berechne({ ...basis, ...x }).garSek;
+test('Dicker, höhere Garstufe, kälterer Start und größerer Gerätefaktor → jeweils länger', () => {
+  const t = (x) => berechne(basis(x)).garSek;
   assert.ok(t({ dicke: 3.5 }) > t({}));
   assert.ok(t({ stufe: 'wellDone' }) > t({}));
-  assert.ok(t({ start: kalt }) > t({}));
+  assert.ok(t({ tStart: kalt.temp }) > t({}));
+  assert.ok(t({ geraet: { ...pfanne, faktor: 1.3 } }) > t({}));
 });
 
-test('Schwein und Geflügel: immer Sicherheitsregel, nie Risiko-Hinweis', () => {
+test('Schwein und Geflügel: immer Sicherheitsregel, durch nichts veränderbar', () => {
+  const extremeAnpassung = { 'Schwein:sicher': -10, 'Geflügel:sicher': -10, 'Schwein:rare': -10 };
   for (const id of ['schweinekotelett', 'schweinefilet', 'haehnchenbrust']) {
-    const p = berechne({ fleisch: f(id), stufe: 'rare', dicke: 2.5, start: kalt, geraet: pfanne });
-    assert.equal(p.sicher, true);
-    assert.equal(p.raus, SICHER.pull);
-    assert.equal(p.ziel, SICHER.hold);
-    assert.equal(p.risiko, false);
-    assert.ok(p.ruheSek >= SICHER.holdSec, 'Ruhezeit muss die Haltephase abdecken');
+    for (const stufe of ['rare', 'sicher', 'mediumRare']) {
+      const p = berechne({ fleisch: f(id), stufe, dicke: 2.5, tStart: 5, geraet: { faktor: 0.1 }, anpassung: extremeAnpassung });
+      assert.equal(p.sicher, true);
+      assert.equal(p.raus, SICHER.pull);
+      assert.equal(p.ziel, SICHER.hold);
+      assert.equal(p.risiko, false);
+      assert.equal(p.anpassung, 0);
+      assert.ok(p.ruheSek >= SICHER.holdSec, 'Ruhezeit muss die Haltephase abdecken');
+    }
   }
 });
 
-test('Risiko-Hinweis genau unter 63 °C', () => {
-  const p = (stufe) => berechne({ fleisch: f('filet'), stufe, dicke: 4, start: kalt, geraet: pfanne }).risiko;
-  assert.equal(p('medium'), true);
-  assert.equal(p('mediumWell'), false);
+test('Risiko-Hinweis genau unter 63 °C – auch nach persönlicher Anpassung', () => {
+  const r = (stufe, anpassung = {}) => berechne(basis({ fleisch: f('filet'), stufe, dicke: 4, anpassung })).risiko;
+  assert.equal(r('medium'), true);
+  assert.equal(r('mediumWell'), false);
+  assert.equal(r('mediumWell', { 'Rind:mediumWell': -1 }), true);   // 62 °C
+});
+
+test('Persönliche Anpassung verschiebt Ziel und Herausnehmen, begrenzt auf ±4 °C', () => {
+  const p = berechne(basis({ anpassung: { 'Rind:medium': 2 } }));
+  assert.equal(p.ziel, 60);
+  assert.equal(p.raus, 58);
+  const q = berechne(basis({ anpassung: { 'Rind:medium': 99 } }));
+  assert.equal(q.ziel, 58 + ANPASSUNG_MAX);
+  assert.equal(neueAnpassung(0, 'roh'), 1);
+  assert.equal(neueAnpassung(0, 'durch'), -1);
+  assert.equal(neueAnpassung(2, 'gut'), 2);
+  assert.equal(neueAnpassung(ANPASSUNG_MAX, 'roh'), ANPASSUNG_MAX);
+  assert.equal(neueAnpassung(undefined, 'durch'), -1);
 });
 
 test('Nachgaren nach Dicke', () => {
@@ -47,11 +69,82 @@ test('Nachgaren nach Dicke', () => {
   assert.equal(nachgaren(5), 3);
 });
 
-test('Ablauf Sicherheitsfleisch enthält Haltephase und Kontrollmessung', () => {
+test('Ablauf Genuss: Seite 1, Seite 2, Messen, Ruhen, Fertig – mit Warteschritt bei Versatz', () => {
+  const fl = f('rumpsteak');
+  const plan = berechne(basis());
+  assert.deepEqual(ablauf(plan, fl).map((s) => s.typ), ['timer', 'timer', 'check', 'timer', 'fertig']);
+  const mitWarten = ablauf(plan, fl, 'gasgrill', 90);
+  assert.equal(mitWarten[0].warten, true);
+  assert.equal(mitWarten[0].sek, 90);
+  assert.match(mitWarten[1].text, /Rost/);
+  assert.equal(mitWarten.filter((s) => s.kochen).reduce((a, s) => a + s.sek, 0), plan.garSek);
+});
+
+test('Ablauf Sicherheit: Haltephase 2 Min. und Kontrollmessung ≥ 70 °C', () => {
   const fl = f('haehnchenbrust');
-  const plan = berechne({ fleisch: fl, stufe: 'sicher', dicke: 2.5, start: kalt, geraet: pfanne });
-  const titel = ablauf(plan, fl).map((s) => s.titel);
-  assert.ok(titel.includes('Haltephase'));
-  assert.ok(titel.includes('Kontrollmessung'));
-  assert.equal(titel.at(-1), 'Guten Appetit! 🍽️');
+  const plan = berechne({ fleisch: fl, stufe: 'sicher', dicke: 2.5, tStart: 5, geraet: pfanne });
+  const s = ablauf(plan, fl);
+  const halte = s.find((x) => x.titel === 'Haltephase');
+  const kontrolle = s.find((x) => x.titel === 'Kontrollmessung');
+  assert.equal(halte.sek, SICHER.holdSec);
+  assert.equal(kontrolle.grenze, SICHER.hold);
+  assert.equal(s.find((x) => x.typ === 'check').grenze, SICHER.pull);
+  const ruheGesamt = s.filter((x) => x.ruhe).reduce((a, x) => a + x.sek, 0);
+  assert.equal(ruheGesamt, plan.ruheSek);
+});
+
+test('Zusatzzeit: ohne Messwert 1 Min., mit Messwert geschätzt und begrenzt', () => {
+  assert.equal(zusatzzeit({ tStart: 5, grenze: 52, gemessen: null, gekochtSek: 300 }), NACHBRATEN_SEK);
+  assert.equal(zusatzzeit({ tStart: 5, grenze: 52, gemessen: 55, gekochtSek: 300 }), 0);
+  const knapp = zusatzzeit({ tStart: 5, grenze: 52, gemessen: 50, gekochtSek: 300 });
+  const weit = zusatzzeit({ tStart: 5, grenze: 52, gemessen: 35, gekochtSek: 300 });
+  assert.ok(knapp >= ZUSATZ_MIN_SEK && knapp < weit && weit <= ZUSATZ_MAX_SEK);
+});
+
+test('Kalibrierung: zu kurz → Faktor steigt, zu lang → sinkt, ohne Info → null', () => {
+  const d = { faktor: 1, planSek: 360, tStart: 15, raus: 52, gekochtBeiErster: 360, gekochtGesamt: 360, neinAnzahl: 0 };
+  const zuKalt = kalibriere({ ...d, ersteMessung: 45 });
+  const zuHeiss = kalibriere({ ...d, ersteMessung: 60 });
+  const genau = kalibriere({ ...d, ersteMessung: 52 });
+  assert.ok(zuKalt.faktor > 1);
+  assert.ok(zuHeiss.faktor < 1);
+  assert.ok(Math.abs(genau.faktor - 1) < 0.01);
+  assert.equal(kalibriere({ ...d, ersteMessung: null }), null);                    // „Ja“ ohne Messwert
+  const nein2 = kalibriere({ ...d, ersteMessung: null, neinAnzahl: 2, gekochtGesamt: 480 });
+  assert.ok(nein2.faktor > 1);
+  const extrem = kalibriere({ ...d, faktor: FAKTOR_MAX, ersteMessung: 20 });
+  assert.ok(extrem.faktor <= FAKTOR_MAX);
+  const extremRunter = kalibriere({ ...d, faktor: FAKTOR_MIN, ersteMessung: 100 });
+  assert.ok(extremRunter.faktor >= FAKTOR_MIN);
+});
+
+test('Zeitplan: alle Stücke gleichzeitig servierfertig', () => {
+  const plaene = [
+    berechne(basis({ stufe: 'mediumRare' })),
+    berechne({ fleisch: f('haehnchenbrust'), stufe: 'sicher', dicke: 3, tStart: 5, geraet: pfanne }),
+    berechne(basis({ stufe: 'wellDone', dicke: 2 })),
+  ];
+  const { versatz, gesamtSek } = zeitplan(plaene);
+  assert.equal(Math.min(...versatz), 0);
+  plaene.forEach((p, i) => {
+    assert.ok(Math.abs(versatz[i] + p.garSek + p.ruheSek - gesamtSek) <= 5, `Stück ${i} endet gemeinsam`);
+  });
+  assert.deepEqual(zeitplan([]).versatz, []);
+});
+
+test('CSV: Semikolon, Dezimalkomma, Anführungszeichen, BOM', () => {
+  const text = csv([{ datum: '25.11.2026', fleisch: 'Entrecôte', dicke: 2.5, notiz: 'Herd 7; "heiß"', messModus: true }]);
+  assert.ok(text.startsWith('﻿'));
+  const [kopf, zeile] = text.slice(1).trim().split('\r\n');
+  assert.equal(kopf.split(';').length, zeile.split(';').length - 1);  // Notiz enthält ein ; in Anführungszeichen
+  assert.match(zeile, /2,5/);
+  assert.match(zeile, /"Herd 7; ""heiß"""/);
+  assert.match(zeile, /;ja;/);
+});
+
+test('fmt', () => {
+  assert.equal(fmt(0), '0:00');
+  assert.equal(fmt(59.2), '1:00');
+  assert.equal(fmt(605), '10:05');
+  assert.equal(fmt(-3), '0:00');
 });
