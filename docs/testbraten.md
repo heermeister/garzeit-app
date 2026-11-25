@@ -26,14 +26,21 @@ Konstant halten: **dieselbe Pfanne, dieselbe Herdstufe, dieselbe Fettmenge, glei
 Die Herdstufe in der Notiz am Ende eintragen.
 
 Optional danach: dasselbe mit Hähnchenbrust (2 und 3 cm), um die Sicherheits-Abläufe zu prüfen.
+Die App lernt für Schwein/Geflügel einen **eigenen Gerätefaktor** (dort wird bei reduzierter Hitze gegart),
+die Steak-Zeiten werden davon also nicht verfälscht.
 
 ## Während des Bratens
 
 1. Vor dem Start **Kerntemperatur vor dem Start** messen und eintragen (Feld erscheint im Mess-Modus).
 2. Bei „Kerntemperatur messen“ **immer den Messwert eintragen** – auch wenn du „Ja“ drückst.
-   Gerade die erste Messung ist für die Eichung entscheidend.
-3. Nach der Ruhezeit **nochmal messen** und eintragen (zeigt, wie stark das Fleisch nachgezogen hat).
-4. Gargrad beurteilen: zu roh / genau richtig / zu durch.
+   Gerade die erste Messung ist für die Eichung entscheidend. **Ohne Messwert lernt die App nichts.**
+   Komma oder Punkt gehen beide („52,5“ oder „52.5“).
+3. Das Fleisch bleibt beim Messen in der Pfanne – die Zeit bis zur Antwort zählt als Garzeit mit
+   (in der CSV als `Messwartezeit_s`).
+4. Nach der Ruhezeit **nochmal messen** und eintragen (zeigt, wie stark das Fleisch nachgezogen hat).
+5. Gargrad beurteilen: zu roh / genau richtig / zu durch.
+6. Bildschirm während des Bratens anlassen. War die App doch im Hintergrund, markiert die CSV den Lauf
+   (`Hintergrund_aufgeholt`) und die App lernt daraus nicht – die Zeiten wären ungenau.
 
 ## Auswertung
 

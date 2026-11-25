@@ -7,6 +7,16 @@
 > - **F1:** Rare und medium rare bei Rind und Lamm sind frei wählbar, **mit Hinweis** für Risikogruppen.
 > - **F2:** **Variante B:** Herausnehmen bei ≥ 72 °C, 2 Minuten Haltephase während der Ruhezeit, danach Kontrollmessung ≥ 70 °C.
 > - **F3:** Die Zielwerte für Rind und Lamm werden wie vorgeschlagen übernommen.
+>
+> **Umsetzung der Sicherheitsregel (nach Code-Prüfung, 25.11.2026) – zur Bestätigung:**
+> - Die 2-Minuten-Haltephase lässt sich **nicht überspringen**, auch nicht in der Pause oder per Doppel-Tipp.
+> - Bei Schwein und Geflügel zählt „Ja“ **nur mit eingetragenem Messwert** – beim Herausnehmen (≥ 72 °C) und bei der Kontrollmessung (≥ 70 °C). Ein Wert unter der Grenze wird immer als „Noch nicht“ gewertet.
+> - Unplausible Eingaben (z. B. „725“ statt „72,5“) werden abgelehnt (gültig: 0–100 °C).
+>
+> **Offene Abweichung F4 – bitte bestätigen:** Die Ruhezeit ist in der App auf **höchstens 10 Minuten** begrenzt
+> (oben steht nur „⅓ der Garzeit, mindestens 3 Minuten“). Das betrifft nur sehr dicke, kalt gestartete Stücke
+> (z. B. 6 cm well done). Für die Lebensmittelsicherheit ist es ohne Belang: Haltephase und Kontrollmessung
+> laufen bei Schwein und Geflügel unabhängig davon.
 
 ## 1. Grundprinzip
 
@@ -14,7 +24,7 @@
 - **Zielwert** = Kerntemperatur nach der Ruhezeit (das, was auf dem Teller ankommt).
 - **Herausnehmen bei** = Zielwert minus Nachgaren. Grillfürst empfiehlt 1–2 °C unter Ziel, bei sehr magerem Fleisch ca. 3 °C; Weber beschreibt einen Anstieg um 1–3 °C.
 - Vorschlag für die App: Steaks < 2,5 cm → 1 °C, 2,5–4 cm → 2 °C, > 4 cm → 3 °C.
-- **Ruhezeit:** etwa ⅓ der Garzeit (REWE), mindestens 3 Minuten (USDA für ganze Stücke).
+- **Ruhezeit:** etwa ⅓ der Garzeit (REWE), mindestens 3 Minuten (USDA für ganze Stücke), in der App höchstens 10 Minuten (→ F4).
 
 ## 2. Genuss-Garstufen (Rind, Lamm)
 

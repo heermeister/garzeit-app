@@ -21,6 +21,9 @@ export const RISIKO_GRENZE = 63;
  */
 export const SICHER = Object.freeze({ pull: 72, hold: 70, holdSec: 120 });
 
+/** Plausible Eingaben (°C): Kerntemperatur beim Messen und vor dem Start. Alles andere wird abgelehnt. */
+export const TEMP_BEREICH = Object.freeze({ kern: Object.freeze([0, 100]), start: Object.freeze([-20, 40]) });
+
 /** Persönliche Anpassung der Genuss-Zielwerte: maximal ± so viele °C. */
 export const ANPASSUNG_MAX = 4;
 

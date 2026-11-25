@@ -13,7 +13,7 @@
 //  • Referenz: Rindersteak 2,5 cm, medium rare (raus bei 52 °C), temperiert (15 °C), Pfanne → 6 Min.
 //    (REWE ~2,5 Min./Seite; Weber-Grill 10–12 Min. gesamt)
 
-import { SICHER, RISIKO_GRENZE, STUFEN, ANPASSUNG_MAX, GERAETE_TYPEN } from './data.js';
+import { SICHER, RISIKO_GRENZE, STUFEN, ANPASSUNG_MAX, GERAETE_TYPEN, TEMP_BEREICH } from './data.js';
 
 export const PARAM = Object.freeze({
   REF_MIN: 6,
@@ -30,6 +30,8 @@ export const ZUSATZ_MAX_SEK = 300;
 export const FAKTOR_MIN = 0.4;
 export const FAKTOR_MAX = 2.5;
 export const LERNRATE = 0.5;                // 0 = nie lernen, 1 = Messung voll übernehmen
+export const RUHE_MIN = 3;                  // Minuten
+export const RUHE_MAX = 10;
 
 const klemme = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const runde = (x, auf) => Math.round(x / auf) * auf;
@@ -54,6 +56,12 @@ function tempFaktor(tStart, tRaus, p = PARAM) {
 /** Schlüssel für persönliche Anpassungen, z. B. „Rind:medium“. */
 export const anpassungsSchluessel = (fleisch, stufe) => `${fleisch.tier}:${stufe}`;
 
+/** Bereinigter Anpassungswert (ganze °C, begrenzt); Unsinn im Speicher zählt als 0. */
+export function anpassungsWert(anpassung, schluessel) {
+  const roh = Number(anpassung?.[schluessel]);
+  return Number.isFinite(roh) ? klemme(Math.round(roh), -ANPASSUNG_MAX, ANPASSUNG_MAX) : 0;
+}
+
 /**
  * Berechnet den Garplan für ein Stück.
  * @param {object} e
@@ -74,7 +82,7 @@ export function berechne({ fleisch, stufe, dicke, tStart, geraet, anpassung = {}
     raus = SICHER.pull;
   } else {
     zielBasis = fleisch.stufen[stufe];
-    delta = klemme(Math.round(anpassung[anpassungsSchluessel(fleisch, stufe)] || 0), -ANPASSUNG_MAX, ANPASSUNG_MAX);
+    delta = anpassungsWert(anpassung, anpassungsSchluessel(fleisch, stufe));
     ziel = zielBasis + delta;
     raus = ziel - nachgaren(dicke);
   }
@@ -85,7 +93,7 @@ export function berechne({ fleisch, stufe, dicke, tStart, geraet, anpassung = {}
     * tempFaktor(t0, raus, p)
     * faktor;
   const seiteSek = Math.max(30, runde(minuten * 60 / 2, 5));
-  const ruheMin = klemme(minuten / 3, 3, 10);                   // ⅓ der Garzeit, 3–10 Min.
+  const ruheMin = klemme(minuten / 3, RUHE_MIN, RUHE_MAX);      // ⅓ der Garzeit, 3–10 Min. (docs/kerntemperaturen.md)
   let ruheSek = runde(ruheMin * 60, 30);
   if (sicher) ruheSek = Math.max(ruheSek, SICHER.holdSec);
   return {
@@ -94,14 +102,15 @@ export function berechne({ fleisch, stufe, dicke, tStart, geraet, anpassung = {}
     zielBasis, anpassung: delta, ziel, raus, sicher,
     tStart: t0, faktor,
     garSek: seiteSek * 2, seiteSek, ruheSek,
-    risiko: !sicher && ziel < RISIKO_GRENZE,
+    risiko: !sicher && !(ziel >= RISIKO_GRENZE),   // fail-safe: auch bei ungültigem Wert warnen
   };
 }
 
 /**
  * Erzeugt die Schrittfolge für den Timer eines Stücks.
  * Schritt-Typen:
- *  - { typ:'timer', titel, text, sek, signal, kochen? }   kochen = Zeit zählt als Garzeit
+ *  - { typ:'timer', titel, text, sek, signal, kochen?, ruhe?, halte?, warten? }
+ *       kochen = Zeit zählt als Garzeit; halte = BfR-Haltephase, darf NIE übersprungen werden
  *  - { typ:'check', titel, text, frage, grenze, art:'raus'|'halte', erste?, neinSchritte:[…] }
  *       „Nein“ → neinSchritte werden eingefügt, danach dieselbe Prüfung erneut.
  *  - { typ:'fertig', titel, text }
@@ -135,7 +144,7 @@ export function ablauf(plan, fleisch, geraetTyp = 'pfanne', warteSek = 0) {
       frage: `Mindestens ${SICHER.pull} °C?`,
       neinSchritte: [nachbraten()],
     });
-    s.push({ typ: 'timer', ruhe: true, titel: 'Haltephase', text: `Ruhen lassen. Der Kern muss 2 Minuten lang über ${SICHER.hold} °C bleiben.`, sek: SICHER.holdSec, signal: 'Kontrollmessung!' });
+    s.push({ typ: 'timer', ruhe: true, halte: true, titel: 'Haltephase', text: `Ruhen lassen. Der Kern muss 2 Minuten lang über ${SICHER.hold} °C bleiben.`, sek: SICHER.holdSec, signal: 'Kontrollmessung!' });
     s.push({
       typ: 'check', art: 'halte', grenze: SICHER.hold, titel: 'Kontrollmessung',
       text: 'Sicherheitsregel (BfR): mindestens 70 °C für 2 Minuten.',
@@ -143,7 +152,7 @@ export function ablauf(plan, fleisch, geraetTyp = 'pfanne', warteSek = 0) {
       neinSchritte: [
         { typ: 'timer', kochen: true, titel: typ.ort === 'Pfanne' ? 'Zurück in die Pfanne' : 'Zurück auf den Grill', text: 'Kern zu kühl geworden – nochmal erhitzen.', sek: NACHBRATEN_SEK, signal: 'Messen!' },
         { typ: 'check', art: 'raus', grenze: SICHER.pull, titel: 'Kerntemperatur messen', text: `Wieder mindestens ${SICHER.pull} °C erreichen.`, frage: `Mindestens ${SICHER.pull} °C?`, neinSchritte: [nachbraten()] },
-        { typ: 'timer', ruhe: true, titel: 'Haltephase', text: `Erneut 2 Minuten über ${SICHER.hold} °C halten.`, sek: SICHER.holdSec, signal: 'Kontrollmessung!' },
+        { typ: 'timer', ruhe: true, halte: true, titel: 'Haltephase', text: `Erneut 2 Minuten über ${SICHER.hold} °C halten.`, sek: SICHER.holdSec, signal: 'Kontrollmessung!' },
       ],
     });
     const rest = plan.ruheSek - SICHER.holdSec;
@@ -178,23 +187,68 @@ export function zusatzzeit({ tStart, grenze, gemessen, gekochtSek }, p = PARAM) 
  * @returns {{faktor:number, verhaeltnis:number}|null}  null = keine verwertbare Information
  */
 export function kalibriere(d, p = PARAM) {
-  let benoetigt = null;
-  if (Number.isFinite(d.ersteMessung) && d.gekochtBeiErster > 0 && d.ersteMessung > d.tStart + 2) {
-    const t1 = Math.min(d.ersteMessung, p.T_RAND - 3);
-    benoetigt = d.gekochtBeiErster * F(d.tStart, d.raus, p) / F(d.tStart, t1, p);
-  } else if (d.neinAnzahl > 0 && d.gekochtGesamt > 0) {
-    benoetigt = d.gekochtGesamt - NACHBRATEN_SEK / 2;   // irgendwo in der letzten Zusatzminute erreicht
-  }
-  if (!(benoetigt > 0) || !(d.planSek > 0)) return null;
+  // Nur mit eingetragenem, plausiblem Messwert lernen. Ohne Messwert würde nur „Noch nicht“
+  // Information liefern (→ Faktor könnte nur steigen und Steaks würden systematisch übergart).
+  const t1 = d.ersteMessung;
+  if (!Number.isFinite(t1) || !(d.gekochtBeiErster > 0) || !(d.planSek > 0)) return null;
+  if (t1 <= d.tStart + 2 || t1 >= p.T_RAND - 3) return null;
+  const benoetigt = d.gekochtBeiErster * F(d.tStart, d.raus, p) / F(d.tStart, t1, p);
+  if (!(benoetigt > 0)) return null;
   const verhaeltnis = klemme(benoetigt / d.planSek, 0.6, 1.6);
   const faktor = klemme(d.faktor * Math.pow(verhaeltnis, LERNRATE), FAKTOR_MIN, FAKTOR_MAX);
   return { faktor: Math.round(faktor * 1000) / 1000, verhaeltnis };
 }
 
+/**
+ * Neuer Gerätefaktor aus einer Beobachtung. Jede Messung wird als Beobachtung des absoluten
+ * Zielfaktors (snapshot · verhaeltnis) behandelt – so überschießen mehrere Stücke desselben
+ * Geräts in einem Durchgang nicht über den beobachteten Wert hinaus.
+ */
+export function lerneFaktor({ alt, snapshot, verhaeltnis }) {
+  const a = klemme(Number(alt) || 1, FAKTOR_MIN, FAKTOR_MAX);
+  const ziel = klemme((Number(snapshot) || 1) * verhaeltnis, FAKTOR_MIN, FAKTOR_MAX);
+  return Math.round(klemme(a * Math.pow(ziel / a, LERNRATE), FAKTOR_MIN, FAKTOR_MAX) * 1000) / 1000;
+}
+
+/**
+ * Gerätefaktor je Hitzeregime: Schwein/Geflügel werden bei reduzierter Hitze gegart und lernen
+ * einen eigenen Faktor. Solange dafür nichts gelernt ist, gilt der Genuss-Faktor als Startwert.
+ */
+export function effektiverFaktor(geraet, art) {
+  const genuss = Number(geraet?.faktor);
+  const basis = Number.isFinite(genuss) && genuss > 0 ? genuss : 1;
+  if (art === 'sicher' && geraet?.lernSchritteSicher > 0 && Number(geraet.faktorSicher) > 0) return Number(geraet.faktorSicher);
+  return basis;
+}
+
+const urteilsSchritt = (urteil) => (urteil === 'roh' ? 1 : urteil === 'durch' ? -1 : 0);
+
 /** Geschmacks-Feedback → persönliche Anpassung (nur Genuss-Fleisch). */
 export function neueAnpassung(bisher, urteil) {
-  const d = urteil === 'roh' ? 1 : urteil === 'durch' ? -1 : 0;
-  return klemme((bisher || 0) + d, -ANPASSUNG_MAX, ANPASSUNG_MAX);
+  return klemme((Number(bisher) || 0) + urteilsSchritt(urteil), -ANPASSUNG_MAX, ANPASSUNG_MAX);
+}
+
+/**
+ * Mehrere Urteile für dieselbe Sorte/Garstufe in EINEM Durchgang: höchstens ±1 °C,
+ * Richtung nach Mehrheit (zweimal „zu roh“ = +1, „zu roh“ + „zu durch“ = unverändert).
+ * @param {number} basis  Anpassung zu Beginn des Durchgangs
+ */
+export function anpassungAusUrteilen(basis, urteile) {
+  const summe = urteile.reduce((a, u) => a + urteilsSchritt(u), 0);
+  return klemme((Number(basis) || 0) + Math.sign(summe), -ANPASSUNG_MAX, ANPASSUNG_MAX);
+}
+
+/**
+ * Liest eine eingetippte Temperatur („68“, „68,5“, „68.5“, „-3“).
+ * @returns {{leer:true}|{wert:number}|{fehler:true}}
+ */
+export function leseTemp(text, bereich = TEMP_BEREICH.kern) {
+  const t = String(text ?? '').trim().replace(/\s+/g, '').replace(/°C?$/i, '');
+  if (!t) return { leer: true };
+  if (!/^-?\d{1,3}([.,]\d{1,2})?$/.test(t)) return { fehler: true };
+  const wert = Number(t.replace(',', '.'));
+  if (!Number.isFinite(wert) || wert < bereich[0] || wert > bereich[1]) return { fehler: true };
+  return { wert };
 }
 
 /**
@@ -224,13 +278,16 @@ export const CSV_SPALTEN = [
   ['gekochtGesamt', 'Garzeit_gesamt_s'], ['rausGemessen', 'Kern_beim_Rausnehmen_C'],
   ['nachRuhe', 'Kern_nach_Ruhe_C'], ['urteil', 'Urteil'], ['neuerFaktor', 'Faktor_neu'],
   ['messModus', 'Mess_Modus'], ['notiz', 'Notiz'],
+  ['messwarteSek', 'Messwartezeit_s'], ['ruheSek', 'Plan_Ruhezeit_s'], ['ruheTatsaechlichSek', 'Ruhezeit_tatsaechlich_s'],
+  ['zeitstempel', 'Zeitstempel_raus'], ['gesamtEnde', 'Zeitstempel_fertig'], ['aufgeholt', 'Hintergrund_aufgeholt'],
 ];
 
 function csvFeld(v) {
   if (v === null || v === undefined) return '';
   if (typeof v === 'boolean') return v ? 'ja' : 'nein';
   if (typeof v === 'number') return String(v).replace('.', ',');   // deutsches Excel
-  const s = String(v);
+  let s = String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;   // Excel/Numbers sollen Notizen nicht als Formel ausführen
   return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

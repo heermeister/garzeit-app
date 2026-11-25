@@ -13,14 +13,16 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 | | |
 |---|---|
 | 🍖 **Fleisch** | Rumpsteak, Rinderfilet, Entrecôte, Lammkotelett, Schweinekotelett, Schweinefilet, Hähnchenbrust |
-| 🛡️ **Sicherheit** | Schwein & Geflügel nur „sicher durch“ (BfR): raus bei ≥ 72 °C, 2 Min. Haltephase, Kontrollmessung ≥ 70 °C |
-| ⚠️ **Risikogruppen** | Hinweis bei Rind/Lamm unter 63 °C |
-| ⏱️ **Ablauf** | Seite 1 → Wenden → Seite 2 → Messen (mit geschätzter Zusatzzeit) → Ruhen |
+| 🛡️ **Sicherheit** | Schwein & Geflügel nur „sicher durch“ (BfR): raus bei ≥ 72 °C, 2 Min. Haltephase (nicht überspringbar), Kontrollmessung ≥ 70 °C – „Ja“ nur mit eingetragenem Messwert |
+| ⚠️ **Risikogruppen** | Hinweis bei Rind/Lamm unter 63 °C – auch für jedes Stück auf der Liste |
+| ⏱️ **Ablauf** | Seite 1 → Wenden → Seite 2 → Messen (mit geschätzter Zusatzzeit) → Ruhen; Doppel-Tipp-Schutz, Rückfrage bei widersprüchlichen Eingaben |
+| ♻️ **Wiederherstellen** | Wird die App neu geladen oder von iOS beendet, läuft der Garvorgang beim nächsten Öffnen weiter |
 | 👨‍👩‍👧 **Mehrere Stücke** | bis zu 6, mit Farbe und Namen, gestaffelter Start, gemeinsame Pause |
-| 🍳 **Geräte-Profile** | eigene Pfannen/Grills; jedes Profil lernt seinen Zeitfaktor aus Messwerten |
+| 🍳 **Geräte-Profile** | eigene Pfannen/Grills; jedes Profil lernt seinen Zeitfaktor aus Messwerten (getrennt für Rind/Lamm und Schwein/Geflügel) |
 | 🎚️ **Mein Gargrad** | „zu roh / zu durch“ verschiebt die Zielwerte für Rind/Lamm (± 4 °C) |
 | 🧪 **Mess-Modus** | Protokoll für Testbraten, CSV-Export → [`docs/testbraten.md`](docs/testbraten.md) |
-| 📱 **iPhone** | Töne auch im Stummmodus, Bildschirm bleibt an (ab iOS 18.4 als Home-Screen-App), offline nutzbar |
+| 📱 **iPhone** | Töne auch im Stummmodus (oder wahlweise „Musik nicht unterbrechen“), Bildschirm bleibt an (ab iOS 18.4 als Home-Screen-App), offline nutzbar, „Ton wieder aktivieren“ nach Anruf/Sperre |
+| 💾 **Sicherung** | Geräte, Gelerntes und Messungen als Datei sichern und laden (z. B. Safari → Home-Screen-App) |
 
 ## Stand
 
@@ -47,8 +49,8 @@ Reines HTML/CSS/JavaScript ohne Build-Schritt.
 
 ```bash
 npm start      # http://localhost:8080
-npm test       # Tests für Zeitmodell, Sicherheitsregel, Kalibrierung, CSV
-npm run e2e    # Browser-Abläufe mit vorgespulter Uhr (Playwright)
+npm test       # Tests für Zeitmodell, Sicherheitsregel, Kalibrierung, Eingaben, CSV, Speicher
+npm run e2e    # Browser-Abläufe mit vorgespulter Uhr (Playwright): Haltephase, Doppel-Tipp, Neuladen, …
 ```
 
 ## Auf dem iPhone installieren
@@ -60,3 +62,5 @@ npm run e2e    # Browser-Abläufe mit vorgespulter Uhr (Playwright)
 
 Hinweise fürs iPhone: Vibration unterstützt Safari nicht. Bildschirm anlassen funktioniert in Home-Screen-Apps
 erst ab iOS 18.4 zuverlässig – bei älteren Versionen für die Kochzeit die automatische Sperre ausschalten.
+Daten aus Safari werden **nicht** in die Home-Screen-App übernommen – deshalb am besten gleich installieren
+(oder über ⚙️ → Daten sichern mitnehmen). Nach einem Update der App einmal schließen und neu öffnen.

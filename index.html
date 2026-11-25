@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Meat again</title>
   <meta name="description" content="Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton, auch für mehrere Stücke gleichzeitig.">
-  <meta name="theme-color" content="#1b1310">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbf7f4">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1b1310">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -29,9 +30,10 @@
   <!-- ═════════ Auswahl ═════════ -->
   <main id="v-auswahl" class="ansicht">
     <p id="ios-banner" class="info" hidden>
-      📲 <b>Tipp fürs iPhone:</b> In Safari auf <b>Teilen ⬆️ → „Zum Home-Bildschirm“</b> tippen und die App immer von dort starten. Nur so bleibt der Bildschirm zuverlässig an.
+      📲 <b>Tipp fürs iPhone:</b> In Safari auf <b>Teilen ⬆️ → „Zum Home-Bildschirm“</b> tippen und die App ab dann von dort starten – am besten gleich: Geräte, Gelerntes und Messungen aus Safari werden nicht in die Home-Screen-App übernommen (bei Bedarf über ⚙️ → Daten sichern mitnehmen).
     </p>
-    <p id="mess-badge" class="info mess" hidden>🧪 <b>Mess-Modus aktiv</b>: Bitte Temperaturen eintragen, wann immer die App danach fragt.</p>
+    <p id="mess-badge" class="info mess" hidden>🧪 <b>Mess-Modus aktiv</b>: Bitte Temperaturen eintragen, wann immer die App danach fragt.
+      <span id="mess-safari" hidden><br>Safari löscht Daten nach 7 Tagen ohne Besuch – regelmäßig exportieren oder die App installieren.</span></p>
 
     <section class="block">
       <h2>1 · Fleisch</h2>
@@ -40,7 +42,11 @@
 
     <section class="block">
       <h2><span>2 · Dicke</span> <span id="dicke-wert" class="wert"></span></h2>
-      <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
+      <div class="dicke-zeile">
+        <button id="dicke-minus" type="button" class="mini" aria-label="− 0,5 cm dünner">−</button>
+        <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
+        <button id="dicke-plus" type="button" class="mini" aria-label="+ 0,5 cm dicker">+</button>
+      </div>
       <div class="skala"><span>1 cm</span><span>6 cm</span></div>
     </section>
 
@@ -61,14 +67,16 @@
       <div id="start-liste" class="chips"></div>
       <label id="tstart-feld" class="feld" hidden>
         <span>🌡️ Kerntemperatur vor dem Start <small>(Mess-Modus, optional)</small></span>
-        <input id="tstart" type="number" inputmode="decimal" step="0.5" min="-20" max="40" placeholder="z. B. 6">
+        <input id="tstart" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 6" aria-describedby="tstart-fehler">
+        <small id="tstart-fehler" class="fehler-text" hidden>Bitte einen Wert zwischen −20 und 40 °C eintragen (z. B. 6 oder 6,5).</small>
       </label>
       <h3 class="unter-h">Gerät</h3>
       <div id="geraet-liste" class="chips"></div>
       <p id="geraet-info" class="info warn" hidden></p>
     </section>
 
-    <section class="block plan" aria-live="polite">
+    <section class="block plan">
+      <p id="plan-hinweis" class="klein oben" hidden>👀 Vorschau der Auswahl oben – kommt erst mit ➕ auf die Liste.</p>
       <div class="plan-zeile"><span>Garzeit ca.</span><b id="p-gar"></b></div>
       <div class="plan-zeile"><span>Pro Seite</span><b id="p-seite"></b></div>
       <div class="plan-zeile"><span>Herausnehmen bei</span><b id="p-raus"></b></div>
@@ -85,8 +93,10 @@
         <button id="hinzu" type="button" class="mittel">➕ Hinzufügen</button>
       </div>
       <ul id="teller-liste" class="teller-liste"></ul>
+      <p id="teller-risiko" class="info warn" hidden></p>
       <div id="teller-plan" class="teller-plan" hidden></div>
       <p id="teller-hinweis" class="klein">Für ein einzelnes Stück einfach direkt starten.</p>
+      <button id="teller-leeren" type="button" class="text-knopf" hidden>🗑️ Liste leeren</button>
     </section>
 
     <button id="start" type="button" class="gross primaer">▶️ Los!</button>
@@ -95,22 +105,25 @@
 
   <!-- ═════════ Timer ═════════ -->
   <main id="v-timer" class="ansicht" hidden>
-    <section id="held" class="held" aria-live="polite">
+    <section id="held" class="held">
       <p id="h-wer" class="h-wer"></p>
       <h2 id="h-titel" class="h-titel"></h2>
       <div id="h-zeit" class="h-zeit" role="timer"></div>
     </section>
+    <p id="sr-ansage" class="nur-sr" role="status" aria-live="polite"></p>
+    <button id="t-ton" type="button" class="gross ton-knopf" hidden>🔔 Ton wieder aktivieren</button>
+    <p id="t-wake" class="info warn" hidden></p>
     <div id="stuecke" class="stuecke"></div>
     <div id="t-steuer" class="zwei">
       <button id="t-pause" type="button" class="gross">⏸️ Pause</button>
       <button id="t-abbruch" type="button" class="gross">✖ Abbrechen</button>
     </div>
     <button id="t-neu" type="button" class="gross primaer" hidden>↩︎ Neues Essen</button>
-    <p id="t-wake" class="info warn" hidden></p>
   </main>
 
   <!-- ═════════ Einstellungen ═════════ -->
   <main id="v-einstellungen" class="ansicht" hidden>
+    <button type="button" class="text-knopf zurueck" data-zurueck>‹ Zurück</button>
     <h2 class="seiten-titel">⚙️ Einstellungen</h2>
 
     <section class="block">
@@ -132,7 +145,15 @@
       <h2>🔁 Automatisch lernen</h2>
       <label class="schalter">
         <input id="opt-lernen" type="checkbox">
-        <span>Wenn du beim Messen die Temperatur einträgst, passt die App die Zeiten für das jeweilige Gerät an.</span>
+        <span>Wenn du beim Messen die Temperatur einträgst, passt die App die Zeiten für das jeweilige Gerät an – getrennt für Rind/Lamm und für Schwein/Geflügel (andere Hitze).</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🎵 Musik beim Kochen</h2>
+      <label class="schalter">
+        <input id="opt-musik" type="checkbox">
+        <span>Musik nicht unterbrechen. Dann schaltet der <b>Stummschalter</b> die Signale stumm – beim Kochen also Stummschalter aus. Ohne Haken sind die Signale auch im Stummmodus hörbar, laufende Musik wird aber angehalten.</span>
       </label>
     </section>
 
@@ -153,11 +174,23 @@
       <button id="anpass-reset" type="button" class="mittel">↺ Alle zurücksetzen</button>
     </section>
 
+    <section class="block">
+      <h2>💾 Daten sichern</h2>
+      <p class="klein">Geräte, Gelerntes, Einstellungen und Messungen als Datei sichern – z. B. um sie von Safari in die Home-Screen-App oder auf ein neues iPhone mitzunehmen.</p>
+      <div class="zwei">
+        <button id="d-sichern" type="button" class="mittel">💾 Sichern</button>
+        <button id="d-laden" type="button" class="mittel">📥 Laden</button>
+      </div>
+      <input id="d-datei" type="file" accept=".json,application/json" hidden>
+      <p id="d-status" class="klein"></p>
+    </section>
+
     <p class="klein mitte">Alle Daten bleiben nur auf diesem Gerät.</p>
   </main>
 
   <!-- ═════════ Messungen ═════════ -->
   <main id="v-messungen" class="ansicht" hidden>
+    <button type="button" class="text-knopf zurueck" data-zurueck>‹ Zurück</button>
     <h2 class="seiten-titel">📊 Messungen</h2>
     <p id="m-anzahl" class="klein"></p>
     <div class="zwei">
@@ -167,6 +200,7 @@
     <ul id="m-liste" class="m-liste"></ul>
   </main>
 
+  <button id="laufleiste" type="button" class="laufleiste" hidden></button>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script type="module" src="js/app.js"></script>
