@@ -1,8 +1,11 @@
 // Meat again – Oberfläche und Ablaufsteuerung
-import { FLEISCH, STUFEN, START, FARBEN, MAX_STUECKE, GERAETE_TYPEN, SICHER, TEMP_BEREICH } from './data.js';
+import {
+  FLEISCH, STUFEN, START, FARBEN, MAX_STUECKE, GERAETE_TYPEN, SICHER, TEMP_BEREICH, METHODEN, SOUS_VIDE,
+} from './data.js';
 import {
   berechne, ablauf, zusatzzeit, kalibriere, lerneFaktor, effektiverFaktor, anpassungAusUrteilen,
   anpassungsSchluessel, anpassungsWert, leseTemp, zeitplan, fmt, csv, ZUSATZ_MIN_SEK,
+  berechneSousVide, ablaufSousVide, dauer,
 } from './model.js';
 import {
   speicher, dauerhaftSpeichern, istDauerhaft, sicherungErstellen, sicherungPruefen, sicherungEinspielen,
@@ -31,6 +34,7 @@ const komma = (v) => String(v).replace('.', ',');
 const cm = (d) => `${komma(d)} cm`;
 const grad = (v) => `${komma(v)} °C`;
 const faktorText = (f) => f.toFixed(2).replace('.', ',');
+const uhrzeit = (ms) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 const neueId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 const SPERRE_MS = 600;                    // Schutz gegen Doppel-Tipp nach jedem Schrittwechsel
@@ -55,16 +59,25 @@ let teller = speicher.teller();
 setzeMusikMischen(einstellungen.musikMischen);
 
 const auswahl = {
-  fleischId: 'rumpsteak', dicke: 2.5, stufe: 'mediumRare', startId: 'kalt', geraetId: 'pfanne',
+  fleischId: 'rumpsteak', dicke: 2.5, stufe: 'mediumRare', startId: 'kalt', geraetId: 'pfanne', methode: 'braten',
   ...(speicher.auswahl() || {}),
 };
 auswahl.tStartGemessen = zahl(auswahl.tStartGemessen);
 
 const finde = (liste, id) => liste.find((x) => x.id === id) || liste[0];
 const findeGeraet = (id) => geraete.find((g) => g.id === id) || geraete[0];
-const gueltigeDicke = (d, fallback) => {
+const methodeVon = (cfg) => (cfg.methode === 'sousvide' ? 'sousvide' : 'braten');
+/** Erlaubte Dicke in cm: Pfanne/Grill 1–6, Sous-vide je nach Form (Gültigkeit der Aufheizformel). */
+const dickeBereich = (methode, fleisch) => (methode === 'sousvide'
+  ? SOUS_VIDE.dicke[fleisch.form === 'zylinder' ? 'zylinder' : 'platte'] : [1, 6]);
+const gueltigeDicke = (d, fallback, [lo, hi] = [1, 6]) => {
   const n = Number(d);
-  return Number.isFinite(n) ? Math.min(6, Math.max(1, Math.round(n * 2) / 2)) : fallback;
+  const x = Number.isFinite(n) ? n : fallback;
+  return Math.min(hi, Math.max(lo, Math.round(x * 2) / 2));
+};
+const startFuer = (methode, id) => {
+  const passend = START.filter((x) => x.methoden.includes(methode));
+  return passend.find((x) => x.id === id) || passend[0];
 };
 
 function stufePassend(fleisch, stufe) {
@@ -75,18 +88,24 @@ function stufePassend(fleisch, stufe) {
 
 /** Stück-Konfiguration → alles, was berechne() braucht. */
 function aufloesen(cfg) {
+  const methode = methodeVon(cfg);
   const fleisch = finde(FLEISCH, cfg.fleischId);
-  const start = finde(START, cfg.startId);
+  const start = startFuer(methode, cfg.startId);
   const geraet = findeGeraet(cfg.geraetId);
-  const tGem = einstellungen.messModus ? zahl(cfg.tStartGemessen) : null;
   const stufe = stufePassend(fleisch, cfg.stufe);
+  const dicke = gueltigeDicke(cfg.dicke, fleisch.dicke, dickeBereich(methode, fleisch));
+  if (methode === 'sousvide') {
+    const plan = berechneSousVide({ fleisch, stufe, dicke, startId: start.id, anpassung });
+    return { methode, fleisch, start, geraet, stufe, plan, tStartGemessen: null };
+  }
+  const tGem = einstellungen.messModus ? zahl(cfg.tStartGemessen) : null;
   const plan = berechne({
-    fleisch, stufe, dicke: gueltigeDicke(cfg.dicke, fleisch.dicke),
+    fleisch, stufe, dicke,
     tStart: tGem ?? start.temp,
     geraet: { ...geraet, faktor: effektiverFaktor(geraet, fleisch.art) },
     anpassung,
   });
-  return { fleisch, start, geraet, stufe, plan, tStartGemessen: tGem };
+  return { methode, fleisch, start, geraet, stufe, plan, tStartGemessen: tGem };
 }
 
 // ═════════════════════════ Navigation ═════════════════════════
@@ -119,12 +138,13 @@ function renderLaufleiste() {
   leiste.hidden = !zeigen;
   document.body.classList.toggle('mit-leiste', zeigen);
   if (!zeigen) return;
-  const checks = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'check');
+  const checks = lauf.stuecke.filter(wartetDringend);
   leiste.classList.toggle('dringend', checks.length > 0);
   if (checks.length) {
-    setText(leiste, `🌡️ Jetzt messen: ${checks.map((st) => st.label).join(', ')} – zum Timer ›`);
+    setText(leiste, `${aktSchritt(checks[0]).art === 'svraus' ? '🛁 Raus aus dem Bad' : '🌡️ Jetzt messen'}: ${checks.map((st) => st.label).join(', ')} – zum Timer ›`);
     return;
   }
+  if (lauf.stuecke.some((st) => aktSchritt(st).art === 'bad')) { setText(leiste, '🛁 Wasserbad vorheizen – zum Timer ›'); return; }
   const timer = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'timer').sort((a, b) => a.endeUm - b.endeUm);
   const st = timer[0];
   setText(leiste, st
@@ -140,9 +160,13 @@ function knopf(cls, gedrueckt, kinder, onClick, extra = {}) {
 function speichereAuswahl() { speicher.setAuswahl(auswahl); }
 
 function renderAuswahl() {
+  auswahl.methode = methodeVon(auswahl);
   const a = aufloesen(auswahl);
+  const sv = a.methode === 'sousvide';
   auswahl.stufe = a.stufe === 'sicher' ? auswahl.stufe : a.stufe;
-  auswahl.dicke = gueltigeDicke(auswahl.dicke, a.fleisch.dicke);
+  const [dLo, dHi] = dickeBereich(a.methode, a.fleisch);
+  auswahl.dicke = gueltigeDicke(auswahl.dicke, a.fleisch.dicke, [dLo, dHi]);
+  auswahl.startId = a.start.id;
   if (!geraete.some((g) => g.id === auswahl.geraetId)) auswahl.geraetId = geraete[0].id;
 
   $('ios-banner').hidden = !(istIOS() && !istInstalliert());
@@ -157,13 +181,23 @@ function renderAuswahl() {
       aktualisiere();
     })));
 
+  // Garmethode
+  $('methode-liste').replaceChildren(...METHODEN.map((m) => knopf('chip', m.id === a.methode,
+    `${m.emoji} ${m.name}`, () => { auswahl.methode = m.id; aktualisiere(); })));
+  $('sv-info').hidden = !sv;
+
   // Dicke
+  $('dicke').min = dLo;
+  $('dicke').max = dHi;
+  $('skala-min').textContent = cm(dLo);
+  $('skala-max').textContent = cm(dHi);
+  $('dicke-form').textContent = a.fleisch.form === 'zylinder' ? 'Durchmesser bzw. Höhe' : 'an der dicksten Stelle';
   $('dicke').value = auswahl.dicke;
   $('dicke').setAttribute('aria-valuetext', `${komma(auswahl.dicke)} Zentimeter`);
   $('dicke-wert').textContent = cm(auswahl.dicke);
-  $('dicke-minus').disabled = auswahl.dicke <= 1;
-  $('dicke-plus').disabled = auswahl.dicke >= 6;
-  $('dicke-info').hidden = auswahl.dicke < DICK_AB_CM;
+  $('dicke-minus').disabled = auswahl.dicke <= dLo;
+  $('dicke-plus').disabled = auswahl.dicke >= dHi;
+  $('dicke-info').hidden = sv || auswahl.dicke < DICK_AB_CM;
 
   // Garstufen
   if (a.fleisch.art === 'sicher') {
@@ -174,7 +208,7 @@ function renderAuswahl() {
       const d = anpassungsWert(anpassung, anpassungsSchluessel(a.fleisch, key));
       const t = basis + d;
       return knopf('chip', key === a.stufe,
-        [STUFEN[key].label, el('small', { text: d ? `${t} °C ✱` : `${t} °C` })],
+        [STUFEN[key].label, el('small', { text: `${sv ? 'Bad ' : ''}${t} °C${d ? ' ✱' : ''}` })],
         () => { auswahl.stufe = key; aktualisiere(); });
     }));
   }
@@ -184,9 +218,10 @@ function renderAuswahl() {
     : '';
 
   // Start & Gerät
-  $('start-liste').replaceChildren(...START.map((s) => knopf('chip', s.id === a.start.id,
+  $('start-liste').replaceChildren(...START.filter((s) => s.methoden.includes(a.methode)).map((s) => knopf('chip', s.id === a.start.id,
     `${s.emoji} ${s.name}`, () => { auswahl.startId = s.id; aktualisiere(); })));
-  $('tstart-feld').hidden = !einstellungen.messModus;
+  $('tstart-feld').hidden = sv || !einstellungen.messModus;
+  $('geraet-titel').textContent = sv ? 'Danach anbraten mit' : 'Gerät';
   if (document.activeElement !== $('tstart')) {
     $('tstart').value = auswahl.tStartGemessen != null ? komma(auswahl.tStartGemessen) : '';
     $('tstart').removeAttribute('aria-invalid');
@@ -194,30 +229,64 @@ function renderAuswahl() {
   $('geraet-liste').replaceChildren(...geraete.map((g) => knopf('chip', g.id === a.geraet.id,
     `${GERAETE_TYPEN[g.typ]?.emoji || '🍳'} ${g.name}`, () => { auswahl.geraetId = g.id; aktualisiere(); })));
   const typInfo = GERAETE_TYPEN[a.geraet.typ];
-  $('geraet-info').hidden = !typInfo?.hinweis;
+  $('geraet-info').hidden = sv || !typInfo?.hinweis;
   $('geraet-info').textContent = typInfo?.hinweis ? `⚠️ ${typInfo.hinweis}` : '';
 
   // Plan
   const p = a.plan;
   $('sicher-info').hidden = !p.sicher;
   $('risiko-info').hidden = !p.risiko;
+  $('risiko-lamm').hidden = a.fleisch.tier !== 'Lamm';
+  $('risiko-intakt').hidden = !p.risiko;
   $('plan-hinweis').hidden = !teller.length;
-  $('p-gar').textContent = `${fmt(p.garSek)} Min.`;
-  $('p-seite').textContent = `${fmt(p.seiteSek)} Min.`;
-  $('p-raus').textContent = grad(p.raus);
-  $('p-ruhe').textContent = `${fmt(p.ruheSek)} Min.`;
   $('p-ziel').textContent = p.sicher ? `≥ ${SICHER.hold} °C (2 Min.)` : grad(p.ziel);
+  if (sv) {
+    $('l-gar').textContent = 'Badtemperatur';
+    $('p-gar').textContent = grad(p.tBad);
+    $('l-seite').textContent = 'Fertig ab';
+    $('p-seite').textContent = dauer(p.minSek);
+    $('l-raus').textContent = 'Ideal bis';
+    $('p-raus').textContent = dauer(p.idealSek);
+    $('l-ruhe').textContent = p.hartMax ? 'Höchstens (Sicherheit)' : 'Höchstens';
+    $('p-ruhe').textContent = dauer(p.maxSek);
+    $('p-hinweis').textContent = p.sicher
+      ? 'Zeiten ab Einlegen ins vorgeheizte Bad. Am Ende misst du die Kerntemperatur – sie entscheidet.'
+      : 'Zeiten ab Einlegen ins vorgeheizte Bad, gerechnet mit 25 % Reserve. Danach 2 × kurz anbraten.';
+    const warn = [
+      !p.machbar ? `⛔ ${p.grund}` : null,
+      p.machbar && p.hartMax ? `⏱️ Unter ${SOUS_VIDE.kurzUnter} °C höchstens ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad – sonst können sich Keime vermehren. Danach sofort anbraten und essen.` : null,
+      p.machbar && p.textur ? '🧽 Für diese Dicke länger als für die Textur ideal – das Fleisch wird etwas weicher.' : null,
+      p.anbratenPflicht ? '🔥 Anbraten ist Pflicht: Das Bad keimt die Oberfläche nicht ab – alle Seiten inkl. Ränder kurz scharf anbraten.' : null,
+    ].filter(Boolean);
+    $('sv-warn').hidden = !warn.length;
+    $('sv-warn').replaceChildren(...warn.flatMap((w, i) => (i ? [el('br'), w] : [w])));
+  } else {
+    $('l-gar').textContent = 'Garzeit ca.';
+    $('p-gar').textContent = `${fmt(p.garSek)} Min.`;
+    $('l-seite').textContent = 'Pro Seite';
+    $('p-seite').textContent = `${fmt(p.seiteSek)} Min.`;
+    $('l-raus').textContent = 'Herausnehmen bei';
+    $('p-raus').textContent = grad(p.raus);
+    $('l-ruhe').textContent = 'Ruhezeit';
+    $('p-ruhe').textContent = `${fmt(p.ruheSek)} Min.`;
+    $('p-hinweis').textContent = 'Zeiten sind Schätzungen – das Thermometer entscheidet.';
+    $('sv-warn').hidden = true;
+  }
   const gelernt = Math.abs(p.faktor - 1) >= 0.005;
   $('p-faktor').hidden = !gelernt;
   $('p-faktor').textContent = gelernt
     ? `🔁 Gelernt für „${a.geraet.name}“${p.sicher ? ' (Schwein/Geflügel)' : ''}: Zeit × ${faktorText(p.faktor)}` : '';
 
   renderTeller();
+  $('start').disabled = !teller.length && !p.machbar;
 }
 
 function aktualisiere() { speichereAuswahl(); renderAuswahl(); }
 
-function setzeDicke(d) { auswahl.dicke = gueltigeDicke(d, auswahl.dicke); aktualisiere(); }
+function setzeDicke(d) {
+  auswahl.dicke = gueltigeDicke(d, auswahl.dicke, dickeBereich(methodeVon(auswahl), finde(FLEISCH, auswahl.fleischId)));
+  aktualisiere();
+}
 $('dicke').addEventListener('input', (e) => setzeDicke(e.target.value));
 $('dicke-minus').addEventListener('click', () => setzeDicke(auswahl.dicke - 0.5));
 $('dicke-plus').addEventListener('click', () => setzeDicke(auswahl.dicke + 0.5));
@@ -253,11 +322,14 @@ function renderTeller() {
   liste.replaceChildren(...teller.map((s, i) => {
     const r = aufgeloest[i];
     const farbe = finde(FARBEN, s.farbeId);
-    const details = [
+    const details = (r.methode === 'sousvide' ? [
+      farbe.name, cm(s.dicke), `${r.plan.stufenLabel} ${zielText(r.plan)}`, `🛁 Bad ${grad(r.plan.tBad)}`,
+      `fertig ab ${dauer(r.plan.minSek)}`, r.start.id === 'gefroren' ? '🧊 gefroren' : null,
+    ] : [
       farbe.name, cm(s.dicke), `${r.plan.stufenLabel} ${zielText(r.plan)}`, r.geraet.name,
       `${fmt(r.plan.garSek + r.plan.ruheSek)} Min.`,
       r.tStartGemessen != null ? `Start ${grad(r.tStartGemessen)} gemessen` : null,
-    ].filter(Boolean).join(' · ');
+    ]).filter(Boolean).join(' · ');
     return el('li', { class: 'teller-eintrag', style: `--farbe:${farbe.css}` },
       el('span', { class: 'punkt', 'aria-hidden': 'true' }),
       el('div', { class: 'teller-text' },
@@ -290,7 +362,16 @@ function renderTeller() {
   // Zeitplan-Vorschau
   const plan = $('teller-plan');
   plan.hidden = n < 2;
-  if (n >= 2) {
+  if (n >= 2 && aufgeloest[0].methode === 'sousvide') {
+    const bad = aufgeloest[0].plan.tBad;
+    const ab = Math.max(...aufgeloest.map((r) => r.plan.minSek));
+    plan.replaceChildren(
+      el('b', { text: `🛁 Alle Beutel gleichzeitig ins ${grad(bad)}-Bad` }),
+      el('ul', {}, teller.map((s, i) => el('li', {},
+        el('span', { class: 'zeit-spalte', text: dauer(aufgeloest[i].plan.minSek) }),
+        `${finde(FARBEN, s.farbeId).punkt} ${stueckLabel(s, teller)} fertig (bis ${dauer(aufgeloest[i].plan.maxSek)})`))),
+      el('p', { class: 'klein', text: `🍽️ Alle fertig ab ca. ${dauer(ab)}. Die App sagt bei jedem Stück einzeln Bescheid.` }));
+  } else if (n >= 2) {
     const { versatz, gesamtSek } = zeitplan(aufgeloest.map((r) => r.plan));
     const reihenfolge = teller.map((s, i) => ({ s, v: versatz[i] })).sort((x, y) => x.v - y.v);
     plan.replaceChildren(
@@ -302,15 +383,32 @@ function renderTeller() {
   }
 }
 
+/** Passt die aktuelle Auswahl zu den Stücken auf der Liste (gleiche Methode, beim Sous-vide gleiche Badtemperatur)? */
+function passtZurListe(neu) {
+  if (!teller.length) return null;
+  const erste = aufloesen(teller[0]);
+  if (erste.methode !== neu.methode) {
+    return `Auf der Liste stehen ${erste.methode === 'sousvide' ? 'Sous-vide' : 'Pfannen-/Grill'}-Stücke – bitte nicht mischen (zwei Durchgänge).`;
+  }
+  if (neu.methode === 'sousvide' && erste.plan.tBad !== neu.plan.tBad) {
+    return `Im selben Bad geht nur eine Temperatur: Die Liste nutzt ${grad(erste.plan.tBad)}, diese Auswahl ${grad(neu.plan.tBad)}.`;
+  }
+  return null;
+}
+
 function fuegeHinzu() {
   if (teller.length >= MAX_STUECKE) { toast(`Maximal ${MAX_STUECKE} Stücke gleichzeitig.`); return false; }
+  const neu = aufloesen(auswahl);
+  if (!neu.plan.machbar) { toast(`⛔ ${neu.plan.grund}`); return false; }
+  const konflikt = passtZurListe(neu);
+  if (konflikt) { toast(`⚠️ ${konflikt}`); return false; }
   const frei = FARBEN.find((f) => !teller.some((s) => s.farbeId === f.id)) || FARBEN[0];
   const name = $('name').value.trim().slice(0, 14);
   teller.push({
     id: neueId(), name, farbeId: frei.id,
     fleischId: auswahl.fleischId, stufe: auswahl.stufe, dicke: auswahl.dicke,
-    startId: auswahl.startId, geraetId: auswahl.geraetId,
-    tStartGemessen: einstellungen.messModus ? auswahl.tStartGemessen : null,
+    startId: auswahl.startId, geraetId: auswahl.geraetId, methode: methodeVon(auswahl),
+    tStartGemessen: einstellungen.messModus && methodeVon(auswahl) === 'braten' ? auswahl.tStartGemessen : null,
   });
   speicher.setTeller(teller);
   $('name').value = '';
@@ -330,7 +428,7 @@ $('teller-leeren').addEventListener('click', () => {
 function auswahlAufListe() {
   const f = finde(FLEISCH, auswahl.fleischId);
   const stufe = stufePassend(f, auswahl.stufe);
-  return teller.some((t) => t.fleischId === auswahl.fleischId
+  return teller.some((t) => t.fleischId === auswahl.fleischId && methodeVon(t) === methodeVon(auswahl)
     && stufePassend(finde(FLEISCH, t.fleischId), t.stufe) === stufe
     && Number(t.dicke) === Number(auswahl.dicke)
     && t.startId === auswahl.startId && t.geraetId === auswahl.geraetId);
@@ -396,18 +494,26 @@ function starte() {
     speicher.setTeller(teller);
   }
   const aufgeloest = konfigs.map(aufloesen);
-  const { versatz } = zeitplan(aufgeloest.map((r) => r.plan));
+  const nichtMachbar = aufgeloest.find((r) => !r.plan.machbar);
+  if (nichtMachbar) { toast(`⛔ ${nichtMachbar.fleisch.name}: ${nichtMachbar.plan.grund}`); return; }
+  const sousVide = aufgeloest[0].methode === 'sousvide';
+  // Sous-vide: alle Beutel gleichzeitig ins Bad (nichts Kaltes nachlegen) – kein Versatz
+  const versatz = sousVide ? aufgeloest.map(() => 0) : zeitplan(aufgeloest.map((r) => r.plan)).versatz;
   const jetzt = Date.now();
 
   lauf.stuecke = konfigs.map((cfg, i) => {
     const r = aufgeloest[i];
-    const schritte = ablauf(r.plan, r.fleisch, r.geraet.typ, versatz[i]);
+    const schritte = r.methode === 'sousvide'
+      ? ablaufSousVide(r.plan, r.fleisch, r.geraet.typ)
+      : ablauf(r.plan, r.fleisch, r.geraet.typ, versatz[i]);
+    const erster = schritte[0];
     return {
       id: cfg.id, cfg, farbe: finde(FARBEN, cfg.farbeId), label: stueckLabel(cfg, konfigs), ...r,
       faktorSnapshot: r.plan.faktor,
-      schritte, idx: 0, endeUm: jetzt + schritte[0].sek * 1000,
+      schritte, idx: 0,
+      endeUm: erster.typ === 'timer' ? jetzt + erster.sek * 1000 : null,
       gekochtSek: 0, neinAnzahl: 0, ersteErfasst: false, ersteMessung: null, gekochtBeiErster: null,
-      rausErledigt: false, messungId: null, feedback: null, checkSeit: null, messwarteSek: 0,
+      rausErledigt: false, messungId: null, feedback: null, checkSeit: erster.typ === 'check' ? jetzt : null, messwarteSek: 0,
       halteAbgelaufen: false, aufgeholt: false, dom: null, renderIdx: -1, sperreBis: 0,
     };
   });
@@ -455,6 +561,8 @@ async function wachHalten() {
 }
 
 const aktSchritt = (st) => st.schritte[st.idx];
+/** Ein Prüfschritt, der sofort Aufmerksamkeit braucht (Vorheizen des Bads zählt nicht dazu). */
+const wartetDringend = (st) => { const s = aktSchritt(st); return s.typ === 'check' && s.art !== 'bad'; };
 const restMs = (st, jetzt = Date.now()) => (lauf.pausiertSeit ? st.endeUm - lauf.pausiertSeit : st.endeUm - jetzt);
 
 /** Schritt beenden und zum nächsten wechseln. startUm = Startzeitpunkt des nächsten Schritts. */
@@ -497,8 +605,8 @@ function ticke() {
     if (ansagen.length) {
       signal(ansagen.join(' '));
       lauf.letzteErinnerung = jetzt;
-    } else if (lauf.stuecke.some((st) => aktSchritt(st).typ === 'check') && jetzt - lauf.letzteErinnerung > 20000) {
-      piep(2);   // Erinnerung: es wartet eine Messung
+    } else if (lauf.stuecke.some(wartetDringend) && jetzt - lauf.letzteErinnerung > 20000) {
+      piep(2);   // Erinnerung: es wartet eine Messung bzw. „Raus aus dem Bad“
       lauf.letzteErinnerung = jetzt;
     }
   }
@@ -544,7 +652,8 @@ function baueStueckKarten() {
     dom.name.textContent = `${st.farbe.punkt} ${st.label}`;
     dom.info.textContent = [
       `${st.fleisch.emoji} ${st.fleisch.name}`, cm(st.cfg.dicke), `${st.plan.stufenLabel} ${zielText(st.plan)}`,
-      st.geraet.name, st.plan.risiko ? '⚠️ unter 63 °C' : null,
+      st.plan.methode === 'sousvide' ? `🛁 Bad ${grad(st.plan.tBad)}` : st.geraet.name,
+      st.plan.risiko ? '⚠️ unter 63 °C' : null,
     ].filter(Boolean).join(' · ');
     dom.karte = el('article', { class: 'stueck', style: `--farbe:${st.farbe.css}` },
       el('header', { class: 's-kopf' }, dom.name, dom.nr),
@@ -577,14 +686,19 @@ function renderTimer() {
       d.aktion.replaceChildren(...baueAktion(st, s, st.idx));
       d.zeit.hidden = s.typ !== 'timer';
       d.balken.parentElement.hidden = s.typ !== 'timer';
-      d.karte.classList.toggle('wartet-auf-dich', s.typ === 'check');
+      d.karte.classList.toggle('wartet-auf-dich', s.typ === 'check' && s.art !== 'bad');
       d.karte.classList.toggle('erledigt', s.typ === 'fertig');
       neueAnsagen.push(n > 1 ? `${st.label}: ${s.titel}` : s.titel);
       // Mehrere Stücke: wartende Messkarte ins Bild holen (nicht, während getippt wird)
-      if (!erstesMal && s.typ === 'check' && n > 1 && ansicht === 'v-timer' && !document.activeElement?.matches?.('input')) {
+      if (!erstesMal && s.typ === 'check' && s.art !== 'bad' && n > 1 && ansicht === 'v-timer' && !document.activeElement?.matches?.('input')) {
         const r = d.karte.getBoundingClientRect();
         if (r.top < 0 || r.bottom > window.innerHeight) d.karte.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
+    }
+    if (s.typ === 'timer' && s.uhr) {
+      // Sous-vide: Uhrzeit mitnennen („fertig ab 18:45“, „bis 19:45“)
+      const ende = uhrzeit(lauf.pausiertSeit ? jetzt + restMs(st, jetzt) : st.endeUm);
+      setText(d.text, s.uhr === 'fertig' ? `${s.text} Fertig ab ${ende}.` : `${s.text} ${s.uhr === 'bis' ? 'bis' : 'um'} ${ende}.`);
     }
     if (s.typ === 'timer') {
       const rest = restMs(st, jetzt);
@@ -595,7 +709,8 @@ function renderTimer() {
   if (neueAnsagen.length) setText($('sr-ansage'), neueAnsagen.join('. '));
 
   // Held: das Dringendste zuerst
-  const checks = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'check');
+  const checks = lauf.stuecke.filter(wartetDringend);
+  const badWartet = lauf.stuecke.find((st) => aktSchritt(st).art === 'bad');
   const timer = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'timer')
     .sort((a, b) => a.endeUm - b.endeUm);
   const pausiert = lauf.pausiertSeit ? '⏸️ Pausiert · ' : '';
@@ -609,8 +724,14 @@ function renderTimer() {
     $('t-neu').disabled = jetzt < lauf.neuSperreBis;
     $('t-wake').hidden = true;
   } else if (checks.length) {
+    const svRaus = checks.every((st) => aktSchritt(st).art === 'svraus');
     setText($('h-wer'), pausiert + (n > 1 ? checks.map((st) => `${st.farbe.punkt} ${st.label}`).join(' · ') : ''));
-    setText($('h-titel'), checks.length > 1 ? '🌡️ Jetzt messen!' : `🌡️ ${aktSchritt(checks[0]).titel}`);
+    setText($('h-titel'), svRaus ? '🛁 Raus aus dem Bad!'
+      : checks.length > 1 ? '🌡️ Jetzt messen!' : `🌡️ ${aktSchritt(checks[0]).titel}`);
+    $('h-zeit').hidden = true;
+  } else if (badWartet) {
+    setText($('h-wer'), pausiert + `Stick auf ${grad(badWartet.plan.tBad)} stellen`);
+    setText($('h-titel'), '🛁 Wasserbad vorheizen');
     $('h-zeit').hidden = true;
   } else if (timer.length) {
     const st = timer[0];
@@ -619,6 +740,7 @@ function renderTimer() {
     setText($('h-titel'), n > 1 ? `${s.titel} → ${s.signal}` : s.titel);
     $('h-zeit').hidden = false;
     setText($('h-zeit'), fmt(restMs(st, jetzt) / 1000));
+    $('h-zeit').classList.toggle('lang', restMs(st, jetzt) >= 3600 * 1000);
   }
   if (!lauf.alleFertig) { $('t-steuer').hidden = false; $('t-neu').hidden = true; }
   $('h-zeit').classList.toggle('pausiert', !!lauf.pausiertSeit);
@@ -630,14 +752,34 @@ function renderTimer() {
 function baueAktion(st, s, idx) {
   if (s.typ === 'timer') {
     if (s.halte) {
-      // BfR-Haltephase: niemals überspringbar
-      return [el('p', { class: 'klein halte-hinweis', text: '🛡️ Haltephase läuft – sie kann nicht übersprungen werden.' })];
+      // BfR-Haltephase bzw. Sous-vide-Mindestzeit bei Schwein/Geflügel: niemals überspringbar
+      return [el('p', { class: 'klein halte-hinweis', text: s.uhr
+        ? '🛡️ Mindestzeit für Schwein/Geflügel – kann nicht übersprungen werden.'
+        : '🛡️ Haltephase läuft – sie kann nicht übersprungen werden.' })];
+    }
+    if (s.fenster) {
+      return [el('button', {
+        type: 'button', class: 'mini weiter', onclick: () => rausAusBad(st, idx),
+        'aria-label': `🥩 Jetzt raus – ${st.label}`,
+      }, '🥩 Jetzt raus')];
     }
     const text = s.warten ? '⏭️ Jetzt schon auflegen' : '⏭️ Überspringen';
     return [el('button', {
       type: 'button', class: 'mini weiter', onclick: () => ueberspringe(st, idx),
       'aria-label': `${text} – ${st.label}`,
     }, text)];
+  }
+  if (s.typ === 'check' && s.nurJa) {
+    // Ein gemeinsames Bad: Vorheizen nur einmal bestätigen
+    const erstes = lauf.stuecke.find((x) => aktSchritt(x).art === s.art);
+    if (s.art === 'bad' && erstes !== st) return [el('p', { class: 'klein', text: '⏳ Wartet aufs Bad – oben bestätigen.' })];
+    return [
+      el('p', { class: 's-frage', text: s.frage }),
+      el('button', {
+        type: 'button', class: 'gross primaer', onclick: () => { if (!gesperrt(st, idx)) antworte(st, true, null); },
+        'aria-label': `${s.knopf} – ${st.label}`,
+      }, s.knopf),
+    ];
   }
   if (s.typ === 'check') {
     const sicher = st.fleisch.art === 'sicher';
@@ -739,6 +881,19 @@ function ueberspringe(st, idx) {
   renderTimer();
 }
 
+/** Sous-vide: während des Zeitfensters „Jetzt raus“ – springt zum Schritt „Raus aus dem Bad“ und bestätigt ihn. */
+function rausAusBad(st, idx) {
+  if (gesperrt(st, idx)) return;
+  tonEntsperren();
+  const s = aktSchritt(st);
+  if (!s.fenster) return;
+  st.gekochtSek += Math.max(0, s.sek - Math.max(0, restMs(st)) / 1000);
+  const ziel = st.schritte.findIndex((x, i) => i > st.idx && x.art === 'svraus');
+  if (ziel < 0) return;
+  st.idx = ziel;
+  antworte(st, true, null);
+}
+
 function antworteMitFeld(st, idx, ja, feld) {
   if (gesperrt(st, idx)) return;
   const m = leseTemp(feld.value, TEMP_BEREICH.kern);
@@ -754,6 +909,19 @@ function antworte(st, ja, gemessen, feld = null) {
   const ende = lauf.pausiertSeit || Date.now();
   const sicher = st.fleisch.art === 'sicher';
   const hat = Number.isFinite(gemessen);
+
+  if (s.art === 'bad') {
+    // Gemeinsames Bad: alle Stücke starten jetzt
+    for (const x of lauf.stuecke) if (aktSchritt(x).art === 'bad') naechsterSchritt(x, ende);
+    renderTimer();
+    return;
+  }
+  if (s.art === 'svraus') {
+    if (!st.rausErledigt) { st.rausErledigt = true; erfasseMessung(st, null, ende); }
+    naechsterSchritt(st, ende);
+    renderTimer();
+    return;
+  }
 
   if (sicher && ja && !hat) {
     toast('🛡️ Bitte den gemessenen Wert eintragen – bei Schwein und Geflügel zählt nur die Messung.');
@@ -805,7 +973,10 @@ function antworte(st, ja, gemessen, feld = null) {
     }
     st.schritte.splice(st.idx + 1, 0, ...extra, { ...s, erste: false });
   } else {
-    if (s.art === 'halte') st.halteAbgelaufen = false;
+    if (s.art === 'halte') {
+      st.halteAbgelaufen = false;
+      if (st.messungId && hat) speicher.aendereMessung(st.messungId, { rausGemessen: gemessen });
+    }
     if (s.art === 'raus' && !st.rausErledigt) {
       st.rausErledigt = true;
       erfasseMessung(st, hat ? gemessen : null, ende);
@@ -821,8 +992,10 @@ function erfasseMessung(st, rausGemessen, zeitpunkt) {
   const jetzt = new Date(zeitpunkt);
   const sicher = st.fleisch.art === 'sicher';
   let neuerFaktor = null;
-  // Nachgeholte Kochschritte (App im Hintergrund) sind ungenau → nicht daraus lernen
-  if (einstellungen.lernen && !st.aufgeholt) {
+  const sousVide = p.methode === 'sousvide';
+  // Nachgeholte Kochschritte (App im Hintergrund) sind ungenau → nicht daraus lernen.
+  // Sous-vide rechnet mit Physik statt mit Gerätefaktor → dort wird nichts gelernt.
+  if (einstellungen.lernen && !st.aufgeholt && !sousVide) {
     const k = kalibriere({
       faktor: st.faktorSnapshot, planSek: p.garSek, tStart: p.tStart, raus: p.raus,
       ersteMessung: st.ersteMessung, gekochtBeiErster: st.gekochtBeiErster,
@@ -858,11 +1031,12 @@ function erfasseMessung(st, rausGemessen, zeitpunkt) {
     nachRuhe: null, urteil: null, neuerFaktor,
     messModus: !!einstellungen.messModus, notiz: '',
     messwarteSek: Math.round(st.messwarteSek || 0), ruheSek: p.ruheSek, aufgeholt: !!st.aufgeholt,
+    methode: sousVide ? 'Sous-vide' : 'Pfanne/Grill', tBad: sousVide ? p.tBad : null,
   };
   if (speicher.neueMessung(messung)) st.messungId = messung.id;
   if (neuerFaktor != null && Math.abs(neuerFaktor - st.faktorSnapshot) >= 0.01) {
     toast(`🔁 ${st.geraet.name}${sicher ? ' (Schwein/Geflügel)' : ''}: Zeiten künftig × ${faktorText(neuerFaktor)}`);
-  } else if (einstellungen.lernen && st.ersteMessung == null && !einstellungen.messModus) {
+  } else if (!sousVide && einstellungen.lernen && st.ersteMessung == null && !einstellungen.messModus) {
     toast('💡 Tipp: Messwert eintragen – dann lernt die App die Zeiten für dein Gerät.');
   }
 }
@@ -1122,7 +1296,7 @@ function renderMessungen() {
     el('b', { text: `${m.datum} ${m.uhrzeit} · ${m.fleisch} ${cm(m.dicke)} · ${m.stufe}` }),
     el('small', {
       text: [
-        `${m.geraet}`,
+        m.methode === 'Sous-vide' ? `🛁 Bad ${grad(m.tBad)}` : `${m.geraet}`,
         `Plan ${fmt(m.planSek)} → tatsächlich ${fmt(m.gekochtGesamt)}`,
         m.ersteMessung != null ? `1. Messung ${grad(m.ersteMessung)}` : null,
         m.rausGemessen != null ? `raus ${grad(m.rausGemessen)}` : null,

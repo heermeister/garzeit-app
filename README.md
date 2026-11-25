@@ -2,7 +2,7 @@
 
 Garzeit-Timer für Fleisch – Hobbyprojekt.
 
-Fleisch, Dicke, Garstufe, Ausgangstemperatur und Gerät wählen → die App führt Schritt für Schritt mit
+Fleisch, Garmethode (Pfanne/Grill oder **Sous-vide**), Dicke, Garstufe, Ausgangstemperatur und Gerät wählen → die App führt Schritt für Schritt mit
 **Signalton und Sprachansage** durch Anbraten, Wenden, Kerntemperatur-Messung und Ruhezeit.
 Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass alle gleichzeitig servierfertig** sind.
 
@@ -16,6 +16,7 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 | 🛡️ **Sicherheit** | Schwein & Geflügel nur „sicher durch“ (BfR): raus bei ≥ 72 °C, 2 Min. Haltephase (nicht überspringbar), Kontrollmessung ≥ 70 °C – „Ja“ nur mit eingetragenem Messwert |
 | ⚠️ **Risikogruppen** | Hinweis bei Rind/Lamm unter 63 °C – auch für jedes Stück auf der Liste |
 | ⏱️ **Ablauf** | Seite 1 → Wenden → Seite 2 → Messen (mit geschätzter Zusatzzeit) → Ruhen; Doppel-Tipp-Schutz, Rückfrage bei widersprüchlichen Eingaben |
+| 🛁 **Sous-vide** | Badtemperatur, „fertig ab / ideal bis / höchstens“ mit Uhrzeit, Aufheizzeit nach Dicke und Form, danach Anbraten. Schwein & Geflügel: Bad 72 °C, Kontrollmessung ≥ 70 °C. Unter 55 °C höchstens 3 h → [`docs/sous-vide.md`](docs/sous-vide.md) |
 | ♻️ **Wiederherstellen** | Wird die App neu geladen oder von iOS beendet, läuft der Garvorgang beim nächsten Öffnen weiter |
 | 👨‍👩‍👧 **Mehrere Stücke** | bis zu 6, mit Farbe und Namen, gestaffelter Start, gemeinsame Pause |
 | 🍳 **Geräte-Profile** | eigene Pfannen/Grills; jedes Profil lernt seinen Zeitfaktor aus Messwerten (getrennt für Rind/Lamm und Schwein/Geflügel) |
@@ -30,6 +31,7 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 - [x] Etappe 2 – Grundgerüst: Auswahl, Zeitmodell, Mehrphasen-Timer
 - [x] Etappe 3 – Mehrere Stücke parallel
 - [x] Etappe 4 – Geräte-Profile, Mess-Modus, CSV-Export, Kalibrierung
+- [x] Sous-vide (Regeln und Quellen → [`docs/sous-vide.md`](docs/sous-vide.md))
 - [ ] Etappe 5 – Testbraten und Eichung → [`docs/testbraten.md`](docs/testbraten.md)
 
 ## Festgelegt (25.11.2026)
@@ -44,7 +46,7 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 | Datei | Inhalt |
 |---|---|
 | `js/data.js` | Fleischarten, Garstufen, Sicherheitsregel, Gerätetypen (aus `docs/kerntemperaturen.md`) |
-| `js/model.js` | Zeitmodell, Ablauf der Schritte, Zusatzzeit, Kalibrierung, Zeitplan, CSV – reine Funktionen |
+| `js/model.js` | Zeitmodell, Ablauf der Schritte, Zusatzzeit, Kalibrierung, Zeitplan, Sous-vide (Aufheizzeit, Zeitfenster), CSV – reine Funktionen |
 | `js/speicher.js` | lokale Speicherung (bleibt nur auf dem Gerät) |
 | `js/signale.js` | Ton, Sprachansage, Vibration, Bildschirm anlassen, iPhone-Besonderheiten |
 | `js/app.js` | Oberfläche und Ablaufsteuerung |

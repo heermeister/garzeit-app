@@ -41,18 +41,24 @@
     </section>
 
     <section class="block">
-      <h2><span>2 · Dicke</span> <span id="dicke-wert" class="wert"></span></h2>
+      <h2>2 · Garmethode</h2>
+      <div id="methode-liste" class="chips"></div>
+      <p id="sv-info" class="info klein-info" hidden>🛁 <b>Sous-vide:</b> salzen ist in Ordnung, aber <b>kein roher Knoblauch, keine Butter, kein Öl</b> in den Beutel. Vakuumieren oder Luft gut verdrängen, Steaks einlagig. Für 72 °C möglichst vakuumieren – Zipper-Nähte halten Hitze schlechter. Sofort essen, nicht vorgaren und aufbewahren.</p>
+    </section>
+
+    <section class="block">
+      <h2><span>3 · Dicke</span> <span id="dicke-wert" class="wert"></span></h2>
       <div class="dicke-zeile">
         <button id="dicke-minus" type="button" class="mini" aria-label="− 0,5 cm dünner">−</button>
         <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
         <button id="dicke-plus" type="button" class="mini" aria-label="+ 0,5 cm dicker">+</button>
       </div>
-      <div class="skala"><span>1 cm</span><span>6 cm</span></div>
+      <div class="skala"><span id="skala-min">1 cm</span><span id="dicke-form" class="klein-inline"></span><span id="skala-max">6 cm</span></div>
       <p id="dicke-info" class="info warn" hidden>⚠️ <b>Dickes Stück:</b> Bei direkter Hitze verbrennt leicht die Kruste, bevor der Kern gar ist. Besser indirekt garen oder rückwärts braten (erst sanft, dann scharf). Die Zeit ist hier nur grob geschätzt – das Thermometer entscheidet.</p>
     </section>
 
     <section class="block">
-      <h2>3 · Garstufe</h2>
+      <h2>4 · Garstufe</h2>
       <div id="stufen-liste" class="chips"></div>
       <p id="anpass-info" class="klein" hidden></p>
       <p id="sicher-info" class="info sicher" hidden>
@@ -60,35 +66,38 @@
       </p>
       <p id="risiko-info" class="info warn" hidden>
         ⚠️ Für <b>Schwangere, Kleinkinder, ältere und immungeschwächte Menschen</b> wird mindestens 63 °C empfohlen (USDA-Mindestwert für ganze Stücke).
+        <span id="risiko-lamm" hidden><br>🐑 Bei Lamm zusätzlich <b>Toxoplasmose</b>-Risiko – Schwangere besser durchgegart (well done).</span>
+        <span id="risiko-intakt" hidden><br>Rosa nur mit <b>ganzen, unbehandelten Stücken</b> – nicht mit nadeliertem, gespritztem, gerolltem oder zusammengesetztem Fleisch.</span>
       </p>
     </section>
 
     <section class="block">
-      <h2>4 · Ausgangslage</h2>
+      <h2>5 · Ausgangslage</h2>
       <div id="start-liste" class="chips"></div>
       <label id="tstart-feld" class="feld" hidden>
         <span>🌡️ Kerntemperatur vor dem Start <small>(Mess-Modus, optional)</small></span>
         <input id="tstart" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 6" aria-describedby="tstart-fehler">
         <small id="tstart-fehler" class="fehler-text" hidden>Bitte einen Wert zwischen −20 und 40 °C eintragen (z. B. 6 oder 6,5).</small>
       </label>
-      <h3 class="unter-h">Gerät</h3>
+      <h3 id="geraet-titel" class="unter-h">Gerät</h3>
       <div id="geraet-liste" class="chips"></div>
       <p id="geraet-info" class="info warn" hidden></p>
     </section>
 
     <section class="block plan">
       <p id="plan-hinweis" class="klein oben" hidden>👀 Vorschau der Auswahl oben – kommt erst mit ➕ auf die Liste.</p>
-      <div class="plan-zeile"><span>Garzeit ca.</span><b id="p-gar"></b></div>
-      <div class="plan-zeile"><span>Pro Seite</span><b id="p-seite"></b></div>
-      <div class="plan-zeile"><span>Herausnehmen bei</span><b id="p-raus"></b></div>
-      <div class="plan-zeile"><span>Ruhezeit</span><b id="p-ruhe"></b></div>
+      <div class="plan-zeile"><span id="l-gar">Garzeit ca.</span><b id="p-gar"></b></div>
+      <div class="plan-zeile"><span id="l-seite">Pro Seite</span><b id="p-seite"></b></div>
+      <div class="plan-zeile"><span id="l-raus">Herausnehmen bei</span><b id="p-raus"></b></div>
+      <div class="plan-zeile"><span id="l-ruhe">Ruhezeit</span><b id="p-ruhe"></b></div>
       <div class="plan-zeile"><span>Ziel auf dem Teller</span><b id="p-ziel"></b></div>
       <p id="p-faktor" class="klein" hidden></p>
-      <p class="klein">Zeiten sind Schätzungen – das Thermometer entscheidet.</p>
+      <p id="sv-warn" class="info warn" hidden></p>
+      <p id="p-hinweis" class="klein">Zeiten sind Schätzungen – das Thermometer entscheidet.</p>
     </section>
 
     <section class="block teller">
-      <h2><span>5 · Mehrere Stücke? <small class="normal">(optional)</small></span></h2>
+      <h2><span>6 · Mehrere Stücke? <small class="normal">(optional)</small></span></h2>
       <div class="name-zeile">
         <input id="name" type="text" maxlength="14" placeholder="Für wen? z. B. Papa" aria-label="Name für dieses Stück" autocomplete="off">
         <button id="hinzu" type="button" class="mittel">➕ Hinzufügen</button>

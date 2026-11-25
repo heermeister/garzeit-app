@@ -29,37 +29,37 @@ export const ANPASSUNG_MAX = 4;
 
 export const FLEISCH = [
   {
-    id: 'rumpsteak', name: 'Rumpsteak', tier: 'Rind', emoji: '🐄', art: 'genuss',
+    id: 'rumpsteak', form: 'platte', name: 'Rumpsteak', tier: 'Rind', emoji: '🐄', art: 'genuss',
     stufen: { rare: 50, mediumRare: 54, medium: 58, mediumWell: 63, wellDone: 70 },
     dicke: 2.5,
   },
   {
-    id: 'filet', name: 'Rinderfilet', tier: 'Rind', emoji: '🐄', art: 'genuss',
+    id: 'filet', form: 'zylinder', name: 'Rinderfilet', tier: 'Rind', emoji: '🐄', art: 'genuss',
     stufen: { rare: 50, mediumRare: 54, medium: 58, mediumWell: 63, wellDone: 70 },
     dicke: 4,
   },
   {
-    id: 'entrecote', name: 'Entrecôte', tier: 'Rind', emoji: '🐄', art: 'genuss',
+    id: 'entrecote', form: 'platte', name: 'Entrecôte', tier: 'Rind', emoji: '🐄', art: 'genuss',
     stufen: { rare: 50, mediumRare: 54, medium: 58, mediumWell: 63, wellDone: 70 },
     dicke: 3,
   },
   {
-    id: 'lammkotelett', name: 'Lammkotelett', tier: 'Lamm', emoji: '🐑', art: 'genuss',
+    id: 'lammkotelett', form: 'platte', name: 'Lammkotelett', tier: 'Lamm', emoji: '🐑', art: 'genuss',
     stufen: { mediumRare: 56, medium: 60, mediumWell: 64, wellDone: 70 },
     dicke: 2.5,
   },
   {
-    id: 'schweinekotelett', name: 'Schweinekotelett', tier: 'Schwein', emoji: '🐖', art: 'sicher',
+    id: 'schweinekotelett', form: 'platte', name: 'Schweinekotelett', tier: 'Schwein', emoji: '🐖', art: 'sicher',
     dicke: 2.5,
     tipp: 'Nach dem Anbraten Hitze auf mittel reduzieren. Neben dem Knochen messen, nicht am Knochen.',
   },
   {
-    id: 'schweinefilet', name: 'Schweinefilet', tier: 'Schwein', emoji: '🐖', art: 'sicher',
+    id: 'schweinefilet', form: 'zylinder', name: 'Schweinefilet', tier: 'Schwein', emoji: '🐖', art: 'sicher',
     dicke: 4,
     tipp: 'Rundum anbraten, dann bei mittlerer Hitze weitergaren. Dicke = Durchmesser an der dicksten Stelle.',
   },
   {
-    id: 'haehnchenbrust', name: 'Hähnchenbrust', tier: 'Geflügel', emoji: '🐔', art: 'sicher',
+    id: 'haehnchenbrust', form: 'platte', name: 'Hähnchenbrust', tier: 'Geflügel', emoji: '🐔', art: 'sicher',
     dicke: 2.5,
     tipp: 'Nach dem Anbraten Hitze auf mittel reduzieren. An der dicksten Stelle messen.',
   },
@@ -80,10 +80,49 @@ export const STANDARD_GERAETE = [
   { id: 'holzkohle', name: 'Holzkohle', typ: 'holzkohle', faktor: 1, lernSchritte: 0 },
 ];
 
+/** Ausgangslage. methoden = für welche Garmethode die Option angeboten wird. */
 export const START = [
-  { id: 'kalt',       name: 'Aus dem Kühlschrank', emoji: '❄️', temp: 5 },
-  { id: 'temperiert', name: 'Temperiert',          emoji: '🌡️', temp: 15 },
+  { id: 'kalt',       name: 'Aus dem Kühlschrank', emoji: '❄️', temp: 5,   methoden: ['braten', 'sousvide'] },
+  { id: 'temperiert', name: 'Temperiert',          emoji: '🌡️', temp: 15,  methoden: ['braten'] },
+  { id: 'gefroren',   name: 'Gefroren',            emoji: '🧊', temp: -18, methoden: ['sousvide'] },
 ];
+
+/** Garmethoden. */
+export const METHODEN = [
+  { id: 'braten',   name: 'Pfanne & Grill', emoji: '🍳' },
+  { id: 'sousvide', name: 'Sous-vide',      emoji: '🛁' },
+];
+
+/**
+ * Sous-vide – Regeln (Recherche 25.11.2026, Quellen in docs/sous-vide.md).
+ * Schwein/Geflügel bleiben bei der freigegebenen BfR-Regel: Bad 72 °C, Kern ≥ 70 °C, Kontrollmessung Pflicht.
+ */
+export const SOUS_VIDE = Object.freeze({
+  sicherBad: 72,            // Bad für Schwein/Geflügel – Kern liegt nach der Aufheizzeit bei ≥ 71,5 °C
+  kurzUnter: 55,            // Bad unter 55 °C (rare, medium rare): Zeit im Bad begrenzt (C. perfringens)
+  kurzMaxSek: 3 * 3600,     // … auf höchstens 3 h (Baldwin: < 4 h zwischen 5 und 54,4 °C inkl. Vorbereitung/Anbraten)
+  zuschlag: 1.25,           // Sicherheitszuschlag auf die berechnete Aufheizzeit
+  gefroren: 1.6,            // gefrorener Start: Aufheizzeit × 1,6 (Obergrenze der Verhältnisse in Baldwins Tabellen)
+  fensterMinSek: 15 * 60,   // mindestens so viel Spielraum zwischen „fertig ab“ und Höchstzeit
+  sicherIdealSek: 45 * 60,  // Schwein/Geflügel: ideal bis „fertig ab“ + 45 min (Saftverlust steigt danach, Park 2020)
+  nachBadSek: 15 * 60,      // Kontrollmessung unter 70 °C → so lange zurück ins Bad
+  anbratenSek: 45,          // pro Seite, sehr heiß
+  anbratenPflichtUnter: 63, // darunter keimt das Bad die Oberfläche nicht ab → Anbraten aller Seiten Pflicht
+  dicke: Object.freeze({ platte: Object.freeze([1, 6]), zylinder: Object.freeze([2, 9]) }),   // Gültigkeit der Aufheiz-Formel (cm)
+});
+
+/**
+ * Zeitfenster im Bad (Stunden ab Einlegen): [ideal bis, höchstens] – danach leidet die Textur.
+ * Praxiswerte (Serious Eats/Anova, ChefSteps, Park 2020 für Hähnchen). null = aus der Mindestzeit berechnet.
+ */
+export const SV_ZEITEN = {
+  Rind: { rare: [2, 3], mediumRare: [2.5, 3], medium: [3, 4], mediumWell: [2.5, 3.5], wellDone: [2, 3] },
+  Lamm: { mediumRare: [3, 4], medium: [3, 4], mediumWell: [2.5, 3.5], wellDone: [2, 3] },
+  Schwein: { sicher: [null, 3] },
+  Geflügel: { sicher: [null, 3] },
+};
+/** Mageres Filet verträgt weniger Zeit. */
+export const SV_MAX_FILET_H = 3;
 
 /** Farb-Labels für mehrere Stücke gleichzeitig. */
 export const FARBEN = [

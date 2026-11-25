@@ -13,7 +13,9 @@
 //  • Referenz: Rindersteak 2,5 cm, medium rare (raus bei 52 °C), temperiert (15 °C), Pfanne → 6 Min.
 //    (REWE ~2,5 Min./Seite; Weber-Grill 10–12 Min. gesamt)
 
-import { SICHER, RISIKO_GRENZE, STUFEN, ANPASSUNG_MAX, GERAETE_TYPEN, TEMP_BEREICH } from './data.js';
+import {
+  SICHER, RISIKO_GRENZE, STUFEN, ANPASSUNG_MAX, GERAETE_TYPEN, TEMP_BEREICH, SOUS_VIDE, SV_ZEITEN, SV_MAX_FILET_H,
+} from './data.js';
 
 export const PARAM = Object.freeze({
   REF_MIN: 6,
@@ -103,6 +105,7 @@ export function berechne({ fleisch, stufe, dicke, tStart, geraet, anpassung = {}
     tStart: t0, faktor,
     garSek: seiteSek * 2, seiteSek, ruheSek,
     risiko: !sicher && !(ziel >= RISIKO_GRENZE),   // fail-safe: auch bei ungültigem Wert warnen
+    methode: 'braten', machbar: true, grund: '',
   };
 }
 
@@ -264,7 +267,162 @@ export function zeitplan(plaene) {
 
 export function fmt(sek) {
   const s = Math.max(0, Math.ceil(sek));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const zwei = (n) => String(n).padStart(2, '0');
+  if (s >= 3600) return `${Math.floor(s / 3600)}:${zwei(Math.floor((s % 3600) / 60))}:${zwei(s % 60)}`;
+  return `${Math.floor(s / 60)}:${zwei(s % 60)}`;
+}
+
+/** Dauer in Worten: „45 min“, „1 h 35 min“, „3 h“. */
+export function dauer(sek) {
+  const m = Math.max(0, Math.round(sek / 60));
+  const h = Math.floor(m / 60);
+  if (!h) return `${m} min`;
+  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+}
+
+// ───────────────────────── Sous-vide ─────────────────────────
+//
+// Aufheizzeit = Zeit, bis der Kern höchstens 0,5 °C unter der Badtemperatur liegt (Baldwin-Definition),
+// Start aus dem Kühlschrank (5 °C). Polynom-Fit an Baldwins Tabelle (Platte 10–60 mm, Zylinder 20–90 mm,
+// Abweichung ≤ ±10 %); physikalisch nachgerechnet (Wärmeleitung, erster Fourier-Term, α ≈ 1,1–1,4·10⁻⁷ m²/s).
+// Steaks/Koteletts/Hähnchenbrust = Platte (Dicke), Filet am Stück oder Medaillon = Zylinder (Durchmesser bzw. Höhe).
+
+const runde5min = (sek) => Math.ceil(sek / 300) * 300;
+
+/** Aufheizzeit in Sekunden OHNE Sicherheitszuschlag. */
+export function aufheizSek({ form, dickeCm, tBad, gefroren = false }) {
+  const d = dickeCm * 10;   // mm
+  const basisMin = form === 'zylinder' ? 0.031 * d * d + 0.73 * d : 0.053 * d * d + 1.56 * d;
+  // schwache Abhängigkeit von der Badtemperatur (normiert auf 5 °C → 54,5 °C)
+  const fT = Math.log(1.24 * Math.max(1, tBad - 5) / 0.5) / Math.log(124);
+  return basisMin * 60 * fT * (gefroren ? SOUS_VIDE.gefroren : 1);
+}
+
+/**
+ * Sous-vide-Plan für ein Stück.
+ * @returns {object} u. a. tBad, minSek (fertig ab), idealSek, maxSek (je ab Einlegen), hartMax, machbar, grund
+ */
+export function berechneSousVide({ fleisch, stufe, dicke, startId = 'kalt', anpassung = {} }) {
+  const sicher = fleisch.art === 'sicher';
+  const stufeKey = sicher ? 'sicher' : stufe;
+  const form = fleisch.form === 'zylinder' ? 'zylinder' : 'platte';
+  const gefroren = startId === 'gefroren';
+  let zielBasis, delta = 0, ziel, tBad;
+  if (sicher) {
+    // BfR-Regel, durch nichts veränderbar: Kern ≥ 70 °C; Bad 72 °C, damit der Kern sicher darüber liegt
+    zielBasis = ziel = SICHER.hold;
+    tBad = SOUS_VIDE.sicherBad;
+  } else {
+    zielBasis = fleisch.stufen[stufe];
+    delta = anpassungsWert(anpassung, anpassungsSchluessel(fleisch, stufe));
+    ziel = zielBasis + delta;
+    tBad = ziel;   // Sous-vide: Bad = Zielkerntemperatur, kein Nachgaren
+  }
+  const [dMin, dMax] = SOUS_VIDE.dicke[form];
+  const heizSek = runde5min(aufheizSek({ form, dickeCm: dicke, tBad, gefroren }) * SOUS_VIDE.zuschlag);
+  const minSek = heizSek + (sicher ? SICHER.holdSec : 0);
+
+  const kurz = tBad < SOUS_VIDE.kurzUnter;
+  const [idealH, maxH] = (SV_ZEITEN[fleisch.tier] || {})[stufeKey] || [null, 3];
+  let maxTextur = maxH * 3600;
+  if (fleisch.id === 'filet') maxTextur = Math.min(maxTextur, SV_MAX_FILET_H * 3600);
+  const maxSek = kurz ? Math.min(maxTextur, SOUS_VIDE.kurzMaxSek) : Math.max(maxTextur, minSek + SOUS_VIDE.fensterMinSek);
+  const idealRoh = idealH == null ? minSek + SOUS_VIDE.sicherIdealSek : idealH * 3600;
+  const idealSek = Math.min(maxSek, Math.max(idealRoh, minSek + SOUS_VIDE.fensterMinSek));
+
+  let machbar = true;
+  let grund = '';
+  if (dicke < dMin || dicke > dMax) {
+    machbar = false;
+    grund = `Für ${form === 'zylinder' ? 'Filets am Stück' : 'Steaks und Koteletts'} rechnet die App Sous-vide von ${dMin} bis ${dMax} cm.`;
+  } else if (kurz && gefroren) {
+    machbar = false;
+    grund = `Gefroren ins Bad unter ${SOUS_VIDE.kurzUnter} °C geht nicht: Das Fleisch bliebe zu lange in einem Bereich, in dem sich Keime vermehren.`;
+  } else if (kurz && minSek + SOUS_VIDE.fensterMinSek > maxSek) {
+    machbar = false;
+    grund = `Zu dick für ${STUFEN[stufeKey].label} im Sous-vide: Es braucht mindestens ${dauer(minSek)}, unter ${SOUS_VIDE.kurzUnter} °C sind aber höchstens ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad erlaubt.`;
+  }
+  return {
+    methode: 'sousvide',
+    stufe: stufeKey, stufenLabel: STUFEN[stufeKey].label,
+    zielBasis, anpassung: delta, ziel, raus: tBad, tBad, sicher, form, gefroren,
+    tStart: gefroren ? -18 : 5, faktor: 1,
+    heizSek, minSek, idealSek, maxSek, hartMax: kurz, kurz,
+    textur: minSek > maxTextur,                       // länger als für die Textur empfohlen
+    machbar, grund,
+    anbratenSek: SOUS_VIDE.anbratenSek,
+    anbratenPflicht: !sicher && ziel < SOUS_VIDE.anbratenPflichtUnter,
+    // Kompatibilität mit Zeitplan/Anzeige
+    garSek: minSek, seiteSek: SOUS_VIDE.anbratenSek, ruheSek: 0,
+    risiko: !sicher && !(ziel >= RISIKO_GRENZE),
+  };
+}
+
+/**
+ * Schritte des Sous-vide-Timers:
+ * Bad vorheizen → Im Wasserbad (Mindestzeit) → Kann raus (bis ideal) → Länger im Bad (bis Höchstzeit)
+ * → Raus aus dem Bad → [Schwein/Geflügel: Kontrollmessung ≥ 70 °C] → Anbraten 2 × → Fertig.
+ */
+export function ablaufSousVide(plan, fleisch, geraetTyp = 'pfanne') {
+  const typ = GERAETE_TYPEN[geraetTyp] || GERAETE_TYPEN.pfanne;
+  const bad = `${String(plan.tBad).replace('.', ',')} °C`;
+  const s = [];
+  s.push({
+    typ: 'check', art: 'bad', nurJa: true, titel: 'Wasserbad vorheizen',
+    text: `Stick auf ${bad} stellen. Fleisch erst ins Wasser, wenn die Temperatur erreicht ist – keinen verzögerten Start nutzen.`,
+    frage: `Hat das Bad ${bad} erreicht?`, knopf: '✅ Bad ist warm',
+  });
+  s.push({
+    typ: 'timer', kochen: true, uhr: 'fertig', titel: 'Im Wasserbad',
+    text: 'Beutel ganz untertauchen, nicht stapeln, nichts Kaltes nachlegen.',
+    sek: plan.minSek, signal: 'Fertig. Kann raus.',
+    // Schwein/Geflügel: Mindestzeit enthält die Haltezeit – nie überspringbar
+    ...(plan.sicher ? { halte: true } : {}),
+  });
+  const fenster = plan.idealSek - plan.minSek;
+  if (fenster > 0) {
+    s.push({
+      typ: 'timer', kochen: true, fenster: true, uhr: 'bis', titel: 'Kann raus',
+      text: 'Gar. Ohne Qualitätsverlust im Bad lassen',
+      sek: fenster, signal: plan.idealSek < plan.maxSek ? (plan.hartMax ? 'Bitte bald raus.' : 'Ideale Zeit vorbei.') : 'Jetzt raus!',
+    });
+  }
+  const spaet = plan.maxSek - Math.max(plan.idealSek, plan.minSek);
+  if (spaet > 0) {
+    s.push({
+      typ: 'timer', kochen: true, fenster: true, uhr: 'spaetestens', titel: plan.hartMax ? 'Bald raus' : 'Länger im Bad',
+      text: plan.hartMax
+        ? `Höchstzeit unter ${SOUS_VIDE.kurzUnter} °C (Sicherheitsgrenze) – spätestens`
+        : 'Die Textur wird jetzt langsam weicher – raus spätestens',
+      sek: spaet, signal: 'Jetzt raus!',
+    });
+  }
+  s.push({
+    typ: 'check', art: 'svraus', nurJa: true, titel: 'Raus aus dem Bad',
+    text: plan.hartMax ? 'Höchstzeit erreicht – jetzt entnehmen und sofort anbraten.' : 'Bitte jetzt aus dem Bad nehmen.',
+    frage: 'Ist der Beutel raus?', knopf: '✅ Ist raus',
+  });
+  if (plan.sicher) {
+    s.push({
+      typ: 'check', art: 'halte', grenze: SICHER.hold, titel: 'Kontrollmessung',
+      text: `Beutel öffnen und sofort an der dicksten Stelle messen (nicht am Knochen). Sicherheitsregel (BfR): mindestens ${SICHER.hold} °C.`,
+      frage: `Mindestens ${SICHER.hold} °C?`,
+      neinSchritte: [{
+        typ: 'timer', kochen: true, halte: true, titel: 'Zurück ins Bad',
+        text: `Neu verschließen und ${Math.round(SOUS_VIDE.nachBadSek / 60)} Min. zurück ins ${bad}-Bad. Tipp: Badtemperatur mit einem Thermometer gegenprüfen.`,
+        sek: SOUS_VIDE.nachBadSek, signal: 'Erneut messen!',
+      }],
+    });
+  }
+  const ort = typ.ort === 'Pfanne' ? 'Pfanne' : 'Grill';
+  s.push({
+    typ: 'timer', titel: 'Anbraten Seite 1',
+    text: `Gut trocken tupfen. ${ort} sehr heiß (Öl raucht leicht).${plan.anbratenPflicht ? ' Pflicht: alle Seiten inkl. Ränder kurz anbraten – das Bad keimt die Oberfläche nicht ab.' : ''}`,
+    sek: plan.anbratenSek, signal: 'Wenden!',
+  });
+  s.push({ typ: 'timer', titel: 'Anbraten Seite 2', text: 'Kurz die Ränder mitnehmen. Ruhen ist nicht nötig.', sek: plan.anbratenSek, signal: 'Servieren!' });
+  s.push({ typ: 'fertig', titel: 'Fertig! 🍽️', text: `${fleisch.name} · ${plan.stufenLabel} · Sous-vide` });
+  return s;
 }
 
 // ───────────────────────── CSV ─────────────────────────
@@ -280,6 +438,7 @@ export const CSV_SPALTEN = [
   ['messModus', 'Mess_Modus'], ['notiz', 'Notiz'],
   ['messwarteSek', 'Messwartezeit_s'], ['ruheSek', 'Plan_Ruhezeit_s'], ['ruheTatsaechlichSek', 'Ruhezeit_tatsaechlich_s'],
   ['zeitstempel', 'Zeitstempel_raus'], ['gesamtEnde', 'Zeitstempel_fertig'], ['aufgeholt', 'Hintergrund_aufgeholt'],
+  ['methode', 'Methode'], ['tBad', 'Bad_C'],
 ];
 
 function csvFeld(v) {

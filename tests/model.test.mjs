@@ -1,10 +1,11 @@
 // Ausführen mit: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FLEISCH, START, SICHER, STANDARD_GERAETE, ANPASSUNG_MAX, TEMP_BEREICH } from '../js/data.js';
+import { FLEISCH, START, SICHER, STANDARD_GERAETE, ANPASSUNG_MAX, TEMP_BEREICH, SOUS_VIDE } from '../js/data.js';
 import {
   berechne, ablauf, nachgaren, zusatzzeit, kalibriere, neueAnpassung, zeitplan, csv, fmt,
   lerneFaktor, effektiverFaktor, anpassungAusUrteilen, anpassungsWert, leseTemp,
+  aufheizSek, berechneSousVide, ablaufSousVide, dauer,
   NACHBRATEN_SEK, ZUSATZ_MIN_SEK, ZUSATZ_MAX_SEK, FAKTOR_MIN, FAKTOR_MAX, RUHE_MIN, RUHE_MAX,
 } from '../js/model.js';
 
@@ -232,6 +233,74 @@ test('CSV: Semikolon, Dezimalkomma, Anführungszeichen, BOM', () => {
   assert.match(zeilen[2], /;'-5 °C Start;/);
   assert.match(zeilen[3], /;-5;/, 'Zahlen bleiben Zahlen');
   assert.match(formel, /Messwartezeit_s;Plan_Ruhezeit_s;Ruhezeit_tatsaechlich_s/);
+});
+
+test('Sous-vide Aufheizzeit: entspricht Baldwins Tabelle (±10 %), Zylinder schneller als Platte, gefroren länger', () => {
+  // Baldwin, Start 5 °C bis Bad −0,5 °C: Platte 25 mm 75 min, 50 mm 210 min; Zylinder 50 mm 120 min
+  const min = (form, cm, extra = {}) => aufheizSek({ form, dickeCm: cm, tBad: 54.5, ...extra }) / 60;
+  for (const [form, cm, soll] of [['platte', 2.5, 75], ['platte', 5, 210], ['zylinder', 5, 120], ['zylinder', 8, 255]]) {
+    assert.ok(Math.abs(min(form, cm) - soll) / soll <= 0.1, `${form} ${cm} cm: ${min(form, cm).toFixed(0)} statt ~${soll} min`);
+  }
+  assert.ok(min('zylinder', 4) < min('platte', 4));
+  assert.ok(min('platte', 2.5, { gefroren: true }) > 1.5 * min('platte', 2.5));
+  assert.ok(aufheizSek({ form: 'platte', dickeCm: 3, tBad: 72 }) > aufheizSek({ form: 'platte', dickeCm: 3, tBad: 54 }));
+});
+
+test('Sous-vide Schwein/Geflügel: Bad 72 °C, Ziel 70 °C, Haltezeit enthalten – durch nichts veränderbar', () => {
+  for (const id of ['schweinekotelett', 'schweinefilet', 'haehnchenbrust']) {
+    const p = berechneSousVide({ fleisch: f(id), stufe: 'rare', dicke: 3, anpassung: { 'Schwein:sicher': -10, 'Geflügel:sicher': -10 } });
+    assert.equal(p.tBad, SOUS_VIDE.sicherBad);
+    assert.equal(p.ziel, SICHER.hold);
+    assert.equal(p.sicher, true);
+    assert.ok(p.minSek >= p.heizSek + SICHER.holdSec);
+    assert.ok(p.heizSek >= aufheizSek({ form: f(id).form, dickeCm: 3, tBad: 72 }) * SOUS_VIDE.zuschlag);
+  }
+});
+
+test('Sous-vide Ablauf Schwein/Geflügel: Mindestzeit nicht überspringbar, Kontrollmessung ≥ 70 °C, Zurück ins Bad', () => {
+  const fl = f('haehnchenbrust');
+  const s = ablaufSousVide(berechneSousVide({ fleisch: fl, stufe: 'sicher', dicke: 2.5 }), fl);
+  assert.deepEqual(s.map((x) => x.art || x.titel), ['bad', 'Im Wasserbad', 'Kann raus', 'Länger im Bad', 'svraus', 'halte', 'Anbraten Seite 1', 'Anbraten Seite 2', 'Fertig! 🍽️']);
+  assert.equal(s[1].halte, true, 'Bad-Mindestzeit bei Hähnchen nicht überspringbar');
+  const kontrolle = s.find((x) => x.art === 'halte');
+  assert.equal(kontrolle.grenze, SICHER.hold);
+  assert.equal(kontrolle.neinSchritte[0].halte, true);
+  assert.equal(kontrolle.neinSchritte[0].titel, 'Zurück ins Bad');
+});
+
+test('Sous-vide Rind/Lamm: Bad = Zieltemperatur, unter 55 °C höchstens 3 h – zu dick oder gefroren wird abgelehnt', () => {
+  const p = berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'mediumRare', dicke: 2.5 });
+  assert.equal(p.tBad, 54);
+  assert.equal(p.hartMax, true);
+  assert.ok(p.machbar);
+  assert.ok(p.maxSek <= SOUS_VIDE.kurzMaxSek);
+  assert.ok(p.minSek < p.idealSek && p.idealSek <= p.maxSek);
+  assert.equal(p.anbratenPflicht, true);
+  assert.equal(p.risiko, true);
+  const dick = berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'mediumRare', dicke: 4 });
+  assert.equal(dick.machbar, false, '4 cm braucht > 3 h');
+  assert.match(dick.grund, /höchstens 3 h/);
+  const gefroren = berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'rare', dicke: 2, startId: 'gefroren' });
+  assert.equal(gefroren.machbar, false);
+  // Ab 55 °C keine Sicherheitsgrenze mehr, nur Textur
+  const medium = berechneSousVide({ fleisch: f('entrecote'), stufe: 'medium', dicke: 4 });
+  assert.equal(medium.hartMax, false);
+  assert.ok(medium.machbar);
+  // Persönliche Anpassung verschiebt das Bad (wie das Ziel)
+  assert.equal(berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'medium', dicke: 2.5, anpassung: { 'Rind:medium': 1 } }).tBad, 59);
+  // Rinderfilet als Zylinder: 4 cm Medaillon medium rare ist machbar
+  assert.ok(berechneSousVide({ fleisch: f('filet'), stufe: 'mediumRare', dicke: 4 }).machbar);
+  const genussAblauf = ablaufSousVide(p, f('rumpsteak'));
+  assert.ok(!genussAblauf.some((x) => x.halte), 'Rind: kein gesperrter Schritt');
+  assert.ok(!genussAblauf.some((x) => x.art === 'halte'), 'Rind: keine Kontrollmessung');
+  assert.match(genussAblauf.find((x) => x.titel === 'Anbraten Seite 1').text, /Pflicht/);
+});
+
+test('fmt und dauer', () => {
+  assert.equal(fmt(3725), '1:02:05');
+  assert.equal(dauer(45 * 60), '45 min');
+  assert.equal(dauer(95 * 60), '1 h 35 min');
+  assert.equal(dauer(3 * 3600), '3 h');
 });
 
 test('fmt', () => {
