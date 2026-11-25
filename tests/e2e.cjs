@@ -48,6 +48,13 @@ async function einzelStueckGenuss(page) {
   await page.click('text=Rumpsteak');
   await page.click('button.chip:has-text("Medium rare")');
   assert.equal(await page.isVisible('#risiko-info'), true, 'Risiko-Hinweis bei medium rare');
+  // Dicke-Hinweis erst ab 5 cm; ± verstellt in 0,5-cm-Schritten
+  assert.equal(await page.isVisible('#dicke-info'), false);
+  for (let i = 0; i < 5; i++) await page.click('#dicke-plus');
+  assert.equal(await text(page, '#dicke-wert'), '5 cm');
+  assert.equal(await page.isVisible('#dicke-info'), true, 'Hinweis für dicke Stücke');
+  for (let i = 0; i < 5; i++) await page.click('#dicke-minus');
+  assert.equal(await text(page, '#dicke-wert'), '2,5 cm');
   await page.click('button.chip:has-text("Temperiert")');
   await page.click('button.chip:has-text("Pfanne")');
   assert.equal(await text(page, '#p-gar'), '6:00 Min.');

@@ -36,6 +36,7 @@ const neueId = () => `${Date.now().toString(36)}${Math.random().toString(36).sli
 const SPERRE_MS = 600;                    // Schutz gegen Doppel-Tipp nach jedem Schrittwechsel
 const SPAET_MS = 5000;                    // so viel später nachgeholt = App war im Hintergrund
 const LAUF_MAX_ALTER_MS = 3 * 3600 * 1000;
+const DICK_AB_CM = 5;                     // ab hier Hinweis: direkte Hitze stößt an Grenzen
 
 let toastTimer;
 function toast(text) {
@@ -162,6 +163,7 @@ function renderAuswahl() {
   $('dicke-wert').textContent = cm(auswahl.dicke);
   $('dicke-minus').disabled = auswahl.dicke <= 1;
   $('dicke-plus').disabled = auswahl.dicke >= 6;
+  $('dicke-info').hidden = auswahl.dicke < DICK_AB_CM;
 
   // Garstufen
   if (a.fleisch.art === 'sicher') {

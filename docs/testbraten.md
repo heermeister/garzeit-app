@@ -21,6 +21,10 @@ klären wir zwei Fragen:
 | 1 | Rumpsteak | 2 cm | Medium rare | aus dem Kühlschrank |
 | 2 | Rumpsteak | 3 cm | Medium rare | aus dem Kühlschrank |
 | 3 | Rumpsteak | 4 cm | Medium rare | aus dem Kühlschrank |
+| 4 *(empfohlen, wenn du oft dicke Steaks brätst)* | Rumpsteak oder Rinderfilet | 5–6 cm | Medium rare | aus dem Kühlschrank |
+
+Lauf 4 eicht das Zeitmodell auch für dicke Stücke – ohne ihn wird dort nur hochgerechnet
+(bei 6 cm liegen die denkbaren Modelle um mehr als Faktor 2 auseinander).
 
 Konstant halten: **dieselbe Pfanne, dieselbe Herdstufe, dieselbe Fettmenge, gleiches Vorheizen** (z. B. 5 Minuten).
 Die Herdstufe in der Notiz am Ende eintragen.
