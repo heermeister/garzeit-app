@@ -461,6 +461,11 @@ async function sousVidePauseHoechstzeit(page) {
   assert.equal(await text(page, '#h-titel'), '⛔ Raus & entsorgen!');
   assert.match(await text(page, '.s-text'), /entsorgen/);
   assert.match(await text(page, '.s-warn'), /nicht mehr essen/);
+  assert.doesNotMatch(await text(page, '.s-hinweis'), /Anbraten/, 'kein „Anbraten Pflicht“ beim Entsorgen');
+  await page.click('#nav-messungen');
+  assert.match(await text(page, '#laufleiste'), /⛔ Raus & entsorgen/, 'Laufleiste nennt das Entsorgen');
+  await page.click('#laufleiste');
+  await vorspulen(page, 1);
   await page.click('button:has-text("Ist raus")');
   assert.equal(await text(page, '#h-titel'), '⛔ Bitte entsorgen – nicht essen');
   assert.equal(await page.locator('button:has-text("zu roh")').count(), 0, 'keine Gargrad-Frage');

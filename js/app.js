@@ -141,10 +141,12 @@ function renderLaufleiste() {
   const checks = lauf.stuecke.filter(wartetDringend);
   leiste.classList.toggle('dringend', checks.length > 0);
   if (checks.length) {
-    const raus = checks.filter((st) => aktSchritt(st).art === 'svraus');
+    const weg = checks.filter((st) => mussEntsorgt(st));
+    const raus = checks.filter((st) => aktSchritt(st).art === 'svraus' && !mussEntsorgt(st));
     const messen = checks.filter((st) => aktSchritt(st).art !== 'svraus');
     const namen = (liste) => liste.map((st) => st.label).join(', ');
     setText(leiste, `${[
+      weg.length ? `⛔ Raus & entsorgen: ${namen(weg)}` : null,
       raus.length ? `🛁 Raus aus dem Bad: ${namen(raus)}` : null,
       messen.length ? `🌡️ Jetzt messen: ${namen(messen)}` : null,
     ].filter(Boolean).join(' · ')} – zum Timer ›`);
@@ -404,6 +406,13 @@ function renderTeller() {
   return problem;
 }
 
+/** Kürzel der Timer-Karte; beim Entsorgen entfällt alles, was zum Anbraten und Essen gehört. */
+const hinweisText = (st, weg = false) => (weg ? [svKuerzel(st.plan)[0]] : [
+  ...svKuerzel(st.plan),
+  st.plan.risiko ? '⚠️ unter 63\u00a0°C · nur ganze Stücke' : null,
+  st.plan.risiko && st.fleisch.tier === 'Lamm' ? '🐑 Toxoplasmose' : null,
+]).filter(Boolean).join(' · ');
+
 /** Kurze Sous-vide-Hinweise für Liste und Timer-Karte. */
 const svKuerzel = (plan) => (plan.methode === 'sousvide' ? [
   plan.hartMax ? `⏱️ max. ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad` : null,
@@ -655,6 +664,18 @@ function wiederherstellen() {
   lauf.pausiertSeit = l.pausiertSeit || null;
   lauf.letzteErinnerung = Date.now();
   lauf.urteile = l.urteile && typeof l.urteile === 'object' ? l.urteile : {};
+  // Ältere Speicherstände: „Ist raus“ nach 4 h oder mehr unter 55 °C führte noch zum Anbraten → jetzt entsorgen
+  for (const st of lauf.stuecke) {
+    if (st.verworfen || !st.plan?.hartMax || !(st.badSek >= SOUS_VIDE.verwerfenAbSek)) continue;
+    st.verworfen = true;
+    if (st.messungId) speicher.aendereMessung(st.messungId, { verworfen: true });
+    const iF = st.schritte.findIndex((x) => x.typ === 'fertig');
+    if (iF >= 0 && st.idx < iF) {
+      st.idx = iF;
+      st.checkSeit = null;
+      stueckFertig(st, Date.now());
+    }
+  }
   laufStarten();
   toast('♻️ Garvorgang wiederhergestellt – einmal tippen, damit die Töne wieder gehen.');
   if (altHinweis) {
@@ -696,7 +717,8 @@ function badZeitSek(st, jetzt = Date.now()) {
   if (st.badSek != null) return st.badSek;
   if (!Number.isFinite(st.badSeit)) return null;
   const s = aktSchritt(st);
-  return imBad(s) || s.art === 'svraus' ? Math.max(0, (jetzt - st.badSeit) / 1000) : null;
+  // ganze Sekunden, abgerundet – Anzeige, Ansage und Entscheidung beim Tippen rechnen gleich
+  return imBad(s) || s.art === 'svraus' ? Math.max(0, Math.floor((jetzt - st.badSeit) / 1000)) : null;
 }
 
 /** „54 °C‑Bad“ ohne Umbruch zwischen Zahl, Einheit und „Bad“. */
@@ -712,13 +734,17 @@ function grenzWarnung(st, jetzt = Date.now()) {
   const sek = badZeitSek(st, jetzt);
   if (sek == null || sek <= SOUS_VIDE.kurzMaxSek + SOUS_VIDE.kulanzSek) return null;
   const weg = sek >= SOUS_VIDE.verwerfenAbSek;
-  // Zur Stufe passend runden: ⚠️ zeigt höchstens „3 h 59 min“, ⛔ mindestens „4 h“
-  const zeit = `🕒 ${dauer((weg ? Math.ceil : Math.floor)(sek / 60) * 60)} im ${badName(st.plan.tBad)}`;
+  // Abrunden passt zur Stufe (⛔ ab sek ≥ 4 h): ⚠️ zeigt höchstens „3 h 59 min“, ⛔ mindestens „4 h“ – wie 📊
+  const zeit = `🕒 ${dauer(Math.floor(sek / 60) * 60)} im ${badName(st.plan.tBad)}`;
   return weg
     ? { stufe: 'weg', zeit, satz: `⛔ ${dauer(SOUS_VIDE.verwerfenAbSek)} oder länger unter ${SOUS_VIDE.kurzUnter} °C im Bad. Nach der 4-Stunden-Regel bitte nicht mehr essen – entsorgen.` }
     : { stufe: 'warn', zeit, satz: `⚠️ Über ${dauer(SOUS_VIDE.kurzMaxSek)} unter ${SOUS_VIDE.kurzUnter} °C im Bad – länger als die Sicherheitsgrenze. Sofort scharf anbraten und gleich essen – nicht für Risikogruppen.` };
 }
 const STUFEN_RANG = { warn: 1, weg: 2 };
+/** „Raus aus dem Bad“ steht an und es sind schon 4 h oder mehr unter 55 °C → entsorgen. */
+function mussEntsorgt(st, jetzt = Date.now()) {
+  return aktSchritt(st).art === 'svraus' && grenzWarnung(st, jetzt)?.stufe === 'weg';
+}
 /** Titel/Text eines Schritts – ein verworfenes Stück endet mit „Entsorgen“ statt „Fertig“. */
 const titelVon = (st, s) => (s.typ === 'fertig' && st.verworfen ? '⛔ Bitte entsorgen' : s.titel);
 const textVon = (st, s) => (s.typ === 'fertig' && st.verworfen
@@ -744,16 +770,18 @@ function ticke() {
   const pausiert = !!lauf.pausiertSeit;
   {
     const ansagen = [];
+    const grenzNamen = { weg: [], warn: [] };
     for (const st of lauf.stuecke) {
       // Alle abgelaufenen Timer nachholen (z. B. nach Hintergrund), Folge-Timer schließen nahtlos an.
       // In der Pause laufen nur die Bad-Timer weiter (das Wasserbad hält nicht an).
       let s = aktSchritt(st);
       let sicherung = 0;
+      const signale = [];
       while (s.typ === 'timer' && (!pausiert || s.imBad) && jetzt >= st.endeUm && sicherung++ < 50) {
         const spaet = jetzt - st.endeUm > SPAET_MS;
         if (s.kochen) { st.gekochtSek += s.sek; if (spaet) st.aufgeholt = true; }
         if (s.halte) st.halteAbgelaufen = true;   // nur ein tatsächlich abgelaufener Timer zählt
-        ansagen.push(lauf.stuecke.length > 1 ? `${st.label}: ${s.signal}` : s.signal);
+        signale.push(lauf.stuecke.length > 1 ? `${st.label}: ${s.signal}` : s.signal);
         if (s.warten && jetzt - st.endeUm > 2000) {
           // Das Auflegen wurde verpasst (App im Hintergrund) → Seite 1 beginnt erst jetzt
           naechsterSchritt(st, jetzt);
@@ -762,16 +790,21 @@ function ticke() {
         naechsterSchritt(st, st.endeUm);
         s = aktSchritt(st);
       }
-      // Überschreitung der Höchstzeit unter 55 °C einmal je Stufe auch ansagen (nicht nur anzeigen)
+      // Überschreitung der Höchstzeit unter 55 °C einmal je Stufe auch ansagen (nicht nur anzeigen).
+      // Dann sind „Kann raus … Jetzt raus!“ überholt – die Sicherheitsansage ersetzt sie.
       const w = grenzWarnung(st, jetzt);
       if (w && STUFEN_RANG[w.stufe] > (STUFEN_RANG[st.warnGemeldet] || 0)) {
         st.warnGemeldet = w.stufe;
-        const satz = w.stufe === 'weg' ? 'Über vier Stunden im Bad – bitte nicht mehr essen.'
-          : 'Höchstzeit im Bad überschritten – sofort anbraten, nicht für Risikogruppen.';
-        ansagen.push(lauf.stuecke.length > 1 ? `${st.label}: ${satz}` : satz);
+        grenzNamen[w.stufe].push(st.label);
         sichereLauf();
+      } else {
+        ansagen.push(...signale);
       }
     }
+    // Sicherheitsansagen zuerst und je Stufe zusammengefasst – lange Sammelansagen schneidet der Sprach-Wachhund ab
+    const wer = (namen) => (lauf.stuecke.length > 1 ? `${namen.join(', ')}: ` : '');
+    if (grenzNamen.warn.length) ansagen.unshift(`${wer(grenzNamen.warn)}Höchstzeit im Bad überschritten – sofort anbraten, nicht für Risikogruppen.`);
+    if (grenzNamen.weg.length) ansagen.unshift(`${wer(grenzNamen.weg)}Über vier Stunden im Bad – bitte nicht mehr essen.`);
     if (ansagen.length) {
       signal(ansagen.join(' '));
       lauf.letzteErinnerung = jetzt;
@@ -829,11 +862,7 @@ function baueStueckKarten() {
       st.plan.methode === 'sousvide' ? `🛁 Bad ${grad(st.plan.tBad)}` : st.geraet.name,
     ].filter(Boolean).join(' · ');
     // Sicherheits-Kürzel auch bei einem einzelnen Stück sichtbar (dort ist die Info-Zeile ausgeblendet)
-    dom.hinweis.textContent = [
-      ...svKuerzel(st.plan),
-      st.plan.risiko ? '⚠️ unter 63\u00a0°C · nur ganze Stücke' : null,
-      st.plan.risiko && st.fleisch.tier === 'Lamm' ? '🐑 Toxoplasmose' : null,
-    ].filter(Boolean).join(' · ');
+    dom.hinweis.textContent = hinweisText(st, st.verworfen);
     dom.hinweis.hidden = !dom.hinweis.textContent;
     dom.karte = el('article', { class: 'stueck', style: `--farbe:${st.farbe.css}` },
       el('header', { class: 's-kopf' }, dom.name, dom.nr),
@@ -889,6 +918,8 @@ function renderTimer() {
     const w = grenzWarnung(st, jetzt);
     d.warn.hidden = !w;
     d.warnZeit.hidden = !w;
+    setText(d.hinweis, hinweisText(st, st.verworfen || w?.stufe === 'weg'));
+    d.hinweis.hidden = !d.hinweis.textContent;
     if (w) {
       setText(d.warn, w.satz);
       setText(d.warnZeit, w.zeit);
@@ -922,7 +953,7 @@ function renderTimer() {
     const raus = checks.filter((st) => aktSchritt(st).art === 'svraus').length;
     const gemischt = raus > 0 && raus < checks.length;
     // Gemischt (einer muss raus, einer gemessen werden): je Stück sagen, was zu tun ist
-    const entsorgen = (st) => aktSchritt(st).art === 'svraus' && grenzWarnung(st, jetzt)?.stufe === 'weg';
+    const entsorgen = (st) => mussEntsorgt(st, jetzt);
     const wer = (st) => `${entsorgen(st) ? '⛔ ' : gemischt ? (aktSchritt(st).art === 'svraus' ? '🛁 ' : '🌡️ ') : ''}${st.farbe.punkt} ${st.label}`;
     setText($('h-wer'), pausiert + (n > 1 ? checks.map(wer).join(' · ') : ''));
     setText($('h-titel'), gemischt ? '🛁 Raus & 🌡️ messen!'
@@ -1134,14 +1165,15 @@ function antworte(st, ja, gemessen, feld = null) {
       st.messwarteSek = (st.messwarteSek || 0) + warte;
     }
     st.checkSeit = null;
-    if (Number.isFinite(st.badSeit) && st.badSek == null) st.badSek = Math.round((jetzt - st.badSeit) / 1000);
+    if (st.badSek == null) st.badSek = badZeitSek(st, jetzt);   // noch im Schritt „Raus aus dem Bad“
     // 4 h oder länger unter 55 °C: nicht anbraten, nicht servieren – direkt zum Ende „Bitte entsorgen“
     if (grenzWarnung(st, jetzt)?.stufe === 'weg') {
       st.verworfen = true;
       st.idx = st.schritte.findIndex((x) => x.typ === 'fertig') - 1;
     }
     if (!st.rausErledigt) { st.rausErledigt = true; erfasseMessung(st, null, jetzt); }
-    naechsterSchritt(st, startNaechster(st, jetzt));
+    // Verworfen: Ende jetzt (der Beutel lag bis eben im Bad) – nicht auf einen Pausenbeginn zurückdatieren
+    naechsterSchritt(st, st.verworfen ? jetzt : startNaechster(st, jetzt));
     renderTimer();
     return;
   }
