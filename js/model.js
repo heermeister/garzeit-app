@@ -272,12 +272,12 @@ export function fmt(sek) {
   return `${Math.floor(s / 60)}:${zwei(s % 60)}`;
 }
 
-/** Dauer in Worten: „45 min“, „1 h 35 min“, „3 h“. */
+/** Dauer in Worten: „45 min“, „1 h 35 min“, „3 h“ – mit geschützten Leerzeichen (kein Umbruch mitten in der Dauer). */
 export function dauer(sek) {
   const m = Math.max(0, Math.round(sek / 60));
   const h = Math.floor(m / 60);
-  if (!h) return `${m} min`;
-  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  if (!h) return `${m}\u00a0min`;
+  return m % 60 ? `${h}\u00a0h\u00a0${m % 60}\u00a0min` : `${h}\u00a0h`;
 }
 
 // ───────────────────────── Sous-vide ─────────────────────────
@@ -340,7 +340,7 @@ export function berechneSousVide({ fleisch, stufe, dicke, startId = 'kalt', anpa
     grund = `Gefroren ins Bad unter ${SOUS_VIDE.kurzUnter} °C geht nicht: Das Fleisch bliebe zu lange in einem Bereich, in dem sich Keime vermehren.`;
   } else if (kurz && minSek + SOUS_VIDE.fensterMinSek > maxSek) {
     machbar = false;
-    grund = `Zu dick für ${STUFEN[stufeKey].label} im Sous-vide: Es braucht mindestens ${dauer(minSek)}, unter ${SOUS_VIDE.kurzUnter} °C sind aber höchstens ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad erlaubt.`;
+    grund = `Zu dick für ${STUFEN[stufeKey].label} im Sous-vide: Es braucht mindestens ${dauer(minSek)} plus ${dauer(SOUS_VIDE.fensterMinSek)} Spielraum – unter ${SOUS_VIDE.kurzUnter} °C sind aber höchstens ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad erlaubt. Dünner schneiden oder eine höhere Garstufe wählen.`;
   }
   return {
     methode: 'sousvide',
@@ -373,7 +373,8 @@ export function ablaufSousVide(plan, fleisch, geraetTyp = 'pfanne') {
     frage: `Hat das Bad ${bad} erreicht?`, knopf: '✅ Bad ist warm',
   });
   s.push({
-    typ: 'timer', kochen: true, uhr: 'fertig', titel: 'Im Wasserbad',
+    // imBad: Das Bad läuft in Echtzeit weiter – auch in der Pause der App
+    typ: 'timer', kochen: true, imBad: true, uhr: 'fertig', titel: 'Im Wasserbad',
     text: 'Beutel ganz untertauchen, nicht stapeln, nichts Kaltes nachlegen.',
     sek: plan.minSek, signal: 'Fertig. Kann raus.',
     // Schwein/Geflügel: Mindestzeit enthält die Haltezeit – nie überspringbar
@@ -382,15 +383,18 @@ export function ablaufSousVide(plan, fleisch, geraetTyp = 'pfanne') {
   const fenster = plan.idealSek - plan.minSek;
   if (fenster > 0) {
     s.push({
-      typ: 'timer', kochen: true, fenster: true, uhr: 'bis', titel: 'Kann raus',
-      text: 'Gar. Ohne Qualitätsverlust im Bad lassen',
+      typ: 'timer', kochen: true, imBad: true, fenster: true, titel: 'Kann raus',
+      // Schon länger als für die Textur ideal (sehr dicke Stücke): nicht „ohne Qualitätsverlust“ versprechen
+      ...(plan.textur
+        ? { uhr: 'spaetestens', text: 'Gar. Für die Textur schon länger als ideal – möglichst bald raus, spätestens' }
+        : { uhr: 'bis', text: 'Gar. Ohne Qualitätsverlust im Bad lassen' }),
       sek: fenster, signal: plan.idealSek < plan.maxSek ? (plan.hartMax ? 'Bitte bald raus.' : 'Ideale Zeit vorbei.') : 'Jetzt raus!',
     });
   }
   const spaet = plan.maxSek - Math.max(plan.idealSek, plan.minSek);
   if (spaet > 0) {
     s.push({
-      typ: 'timer', kochen: true, fenster: true, uhr: 'spaetestens', titel: plan.hartMax ? 'Bald raus' : 'Länger im Bad',
+      typ: 'timer', kochen: true, imBad: true, fenster: true, uhr: 'spaetestens', titel: plan.hartMax ? 'Bald raus' : 'Länger im Bad',
       text: plan.hartMax
         ? `Höchstzeit unter ${SOUS_VIDE.kurzUnter} °C (Sicherheitsgrenze) – spätestens`
         : 'Die Textur wird jetzt langsam weicher – raus spätestens',
@@ -408,7 +412,7 @@ export function ablaufSousVide(plan, fleisch, geraetTyp = 'pfanne') {
       text: `Beutel öffnen und sofort an der dicksten Stelle messen (nicht am Knochen). Sicherheitsregel (BfR): mindestens ${SICHER.hold} °C.`,
       frage: `Mindestens ${SICHER.hold} °C?`,
       neinSchritte: [{
-        typ: 'timer', kochen: true, halte: true, titel: 'Zurück ins Bad',
+        typ: 'timer', kochen: true, halte: true, imBad: true, titel: 'Zurück ins Bad',
         text: `Neu verschließen und ${Math.round(SOUS_VIDE.nachBadSek / 60)} Min. zurück ins ${bad}-Bad. Tipp: Badtemperatur mit einem Thermometer gegenprüfen.`,
         sek: SOUS_VIDE.nachBadSek, signal: 'Erneut messen!',
       }],
@@ -438,7 +442,7 @@ export const CSV_SPALTEN = [
   ['messModus', 'Mess_Modus'], ['notiz', 'Notiz'],
   ['messwarteSek', 'Messwartezeit_s'], ['ruheSek', 'Plan_Ruhezeit_s'], ['ruheTatsaechlichSek', 'Ruhezeit_tatsaechlich_s'],
   ['zeitstempel', 'Zeitstempel_raus'], ['gesamtEnde', 'Zeitstempel_fertig'], ['aufgeholt', 'Hintergrund_aufgeholt'],
-  ['methode', 'Methode'], ['tBad', 'Bad_C'],
+  ['methode', 'Methode'], ['tBad', 'Bad_C'], ['badSek', 'Badzeit_tatsaechlich_s'], ['kontrolleGemessen', 'Kern_Kontrolle_C'],
 ];
 
 function csvFeld(v) {

@@ -17,8 +17,8 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 | ⚠️ **Risikogruppen** | Hinweis bei Rind/Lamm unter 63 °C – auch für jedes Stück auf der Liste |
 | ⏱️ **Ablauf** | Seite 1 → Wenden → Seite 2 → Messen (mit geschätzter Zusatzzeit) → Ruhen; Doppel-Tipp-Schutz, Rückfrage bei widersprüchlichen Eingaben |
 | 🛁 **Sous-vide** | Badtemperatur, „fertig ab / ideal bis / höchstens“ mit Uhrzeit, Aufheizzeit nach Dicke und Form, danach Anbraten. Schwein & Geflügel: Bad 72 °C, Kontrollmessung ≥ 70 °C. Unter 55 °C höchstens 3 h → [`docs/sous-vide.md`](docs/sous-vide.md) |
-| ♻️ **Wiederherstellen** | Wird die App neu geladen oder von iOS beendet, läuft der Garvorgang beim nächsten Öffnen weiter |
-| 👨‍👩‍👧 **Mehrere Stücke** | bis zu 6, mit Farbe und Namen, gestaffelter Start, gemeinsame Pause |
+| ♻️ **Wiederherstellen** | Wird die App neu geladen oder von iOS beendet, läuft der Garvorgang beim nächsten Öffnen weiter (Pfanne/Grill bis 3 h, Sous-vide bis 12 h nach dem geplanten Ende; ein zu alter Lauf mit offener Kontrollmessung wird nicht kommentarlos verworfen) |
+| 👨‍👩‍👧 **Mehrere Stücke** | bis zu 6, mit Farbe und Namen, gestaffelter Start, gemeinsame Pause (das Wasserbad läuft in der Pause weiter) |
 | 🍳 **Geräte-Profile** | eigene Pfannen/Grills; jedes Profil lernt seinen Zeitfaktor aus Messwerten (getrennt für Rind/Lamm und Schwein/Geflügel) |
 | 🎚️ **Mein Gargrad** | „zu roh / zu durch“ verschiebt die Zielwerte für Rind/Lamm (± 4 °C) |
 | 🧪 **Mess-Modus** | Protokoll für Testbraten, CSV-Export → [`docs/testbraten.md`](docs/testbraten.md) |

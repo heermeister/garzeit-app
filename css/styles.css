@@ -129,6 +129,8 @@ input[type=text], input[type=number], select {
 .teller-plan ul { list-style: none; padding: 0; margin: 6px 0 0; }
 .teller-plan li { padding: 2px 0; font-variant-numeric: tabular-nums; }
 .zeit-spalte { display: inline-block; min-width: 3.6em; font-weight: 600; }
+.teller-plan ul.sv li { display: flex; gap: .5em; align-items: baseline; }
+.teller-plan ul.sv .zeit-spalte { min-width: 5.8em; flex: none; }
 
 /* Timer */
 .held { text-align: center; padding: 8px 4px 4px; border-radius: 16px; }
@@ -144,12 +146,15 @@ input[type=text], input[type=number], select {
 .stueck { background: var(--fl); border: 1px solid var(--rand); border-left: 8px solid var(--farbe); border-radius: 14px; padding: 12px; box-shadow: var(--schatten); }
 .stueck.wartet-auf-dich { border-color: var(--alarm); border-left-color: var(--farbe); box-shadow: 0 0 0 2px var(--alarm); order: -1; }
 .halte-hinweis { color: var(--sicher); font-weight: 600; }
+.s-warn { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; font-weight: 600; color: var(--alarm); background: color-mix(in srgb, var(--alarm) 12%, transparent); }
 .ton-knopf { margin-top: 8px; border-color: var(--alarm); }
 .stueck.erledigt { opacity: .95; }
 .s-kopf { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .s-name { font-size: 1.05rem; overflow-wrap: anywhere; }
 .s-nr, .s-info { color: var(--mu); font-size: .8rem; }
 .s-info { display: block; }
+.s-hinweis { display: block; font-size: .8rem; margin-top: 2px; }
+.s-hinweis[hidden] { display: none; }
 .s-zeile { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 6px; }
 .s-titel { font-weight: 600; font-size: 1.1rem; }
 .s-zeit { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }

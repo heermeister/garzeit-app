@@ -141,14 +141,20 @@ function renderLaufleiste() {
   const checks = lauf.stuecke.filter(wartetDringend);
   leiste.classList.toggle('dringend', checks.length > 0);
   if (checks.length) {
-    setText(leiste, `${aktSchritt(checks[0]).art === 'svraus' ? '🛁 Raus aus dem Bad' : '🌡️ Jetzt messen'}: ${checks.map((st) => st.label).join(', ')} – zum Timer ›`);
+    const raus = checks.filter((st) => aktSchritt(st).art === 'svraus');
+    const messen = checks.filter((st) => aktSchritt(st).art !== 'svraus');
+    const namen = (liste) => liste.map((st) => st.label).join(', ');
+    setText(leiste, `${[
+      raus.length ? `🛁 Raus aus dem Bad: ${namen(raus)}` : null,
+      messen.length ? `🌡️ Jetzt messen: ${namen(messen)}` : null,
+    ].filter(Boolean).join(' · ')} – zum Timer ›`);
     return;
   }
   if (lauf.stuecke.some((st) => aktSchritt(st).art === 'bad')) { setText(leiste, '🛁 Wasserbad vorheizen – zum Timer ›'); return; }
-  const timer = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'timer').sort((a, b) => a.endeUm - b.endeUm);
+  const timer = laufendeTimer();
   const st = timer[0];
   setText(leiste, st
-    ? `⏱️ ${fmt(restMs(st) / 1000)} · ${aktSchritt(st).titel}${lauf.pausiertSeit ? ' (Pause)' : ''} – zum Timer ›`
+    ? `⏱️ ${fmt(restMs(st) / 1000)} · ${aktSchritt(st).titel}${angehalten(st) ? ' (Pause)' : ''} – zum Timer ›`
     : '⏱️ Zum Timer ›');
 }
 
@@ -235,6 +241,8 @@ function renderAuswahl() {
   // Plan
   const p = a.plan;
   $('sicher-info').hidden = !p.sicher;
+  $('sicher-pfanne').hidden = sv;
+  $('sicher-sv').hidden = !sv;
   $('risiko-info').hidden = !p.risiko;
   $('risiko-lamm').hidden = a.fleisch.tier !== 'Lamm';
   $('risiko-intakt').hidden = !p.risiko;
@@ -246,9 +254,10 @@ function renderAuswahl() {
     $('l-seite').textContent = 'Fertig ab';
     $('p-seite').textContent = dauer(p.minSek);
     $('l-raus').textContent = 'Ideal bis';
-    $('p-raus').textContent = dauer(p.idealSek);
+    // Gesperrt: kein Zeitfenster anzeigen (sonst z. B. „fertig ab 3 h 5 min · ideal bis 3 h“)
+    $('p-raus').textContent = p.machbar ? dauer(p.idealSek) : '–';
     $('l-ruhe').textContent = p.hartMax ? 'Höchstens (Sicherheit)' : 'Höchstens';
-    $('p-ruhe').textContent = dauer(p.maxSek);
+    $('p-ruhe').textContent = p.machbar ? dauer(p.maxSek) : '–';
     $('p-hinweis').textContent = p.sicher
       ? 'Zeiten ab Einlegen ins vorgeheizte Bad. Am Ende misst du die Kerntemperatur – sie entscheidet.'
       : 'Zeiten ab Einlegen ins vorgeheizte Bad, gerechnet mit 25 % Reserve. Danach 2 × kurz anbraten.';
@@ -277,8 +286,9 @@ function renderAuswahl() {
   $('p-faktor').textContent = gelernt
     ? `🔁 Gelernt für „${a.geraet.name}“${p.sicher ? ' (Schwein/Geflügel)' : ''}: Zeit × ${faktorText(p.faktor)}` : '';
 
-  renderTeller();
-  $('start').disabled = !teller.length && !p.machbar;
+  const problem = renderTeller();
+  // Mit Liste startet die Liste (Auswahl oben wird ggf. nachgefragt), ohne Liste die Auswahl
+  $('start').disabled = teller.length ? !!problem : !p.machbar;
 }
 
 function aktualisiere() { speichereAuswahl(); renderAuswahl(); }
@@ -325,6 +335,7 @@ function renderTeller() {
     const details = (r.methode === 'sousvide' ? [
       farbe.name, cm(s.dicke), `${r.plan.stufenLabel} ${zielText(r.plan)}`, `🛁 Bad ${grad(r.plan.tBad)}`,
       `fertig ab ${dauer(r.plan.minSek)}`, r.start.id === 'gefroren' ? '🧊 gefroren' : null,
+      ...svKuerzel(r.plan),
     ] : [
       farbe.name, cm(s.dicke), `${r.plan.stufenLabel} ${zielText(r.plan)}`, r.geraet.name,
       `${fmt(r.plan.garSek + r.plan.ruheSek)} Min.`,
@@ -335,7 +346,8 @@ function renderTeller() {
       el('div', { class: 'teller-text' },
         el('b', { text: `${s.name ? `${s.name} · ` : ''}${r.fleisch.emoji} ${r.fleisch.name}` }),
         el('small', { text: details }),
-        r.plan.risiko ? el('small', { class: 'warn-text', text: '⚠️ unter 63 °C – nicht für Risikogruppen' }) : null),
+        r.plan.risiko ? el('small', { class: 'warn-text', text: risikoKurz(r) }) : null,
+        r.plan.machbar ? null : el('small', { class: 'warn-text', text: `⛔ ${r.plan.grund}` })),
       el('button', {
         type: 'button', class: 'mini', 'aria-label': `✖ ${stueckLabel(s, teller)} entfernen`,
         onclick: () => { teller = teller.filter((x) => x.id !== s.id); speicher.setTeller(teller); renderAuswahl(); },
@@ -354,20 +366,28 @@ function renderTeller() {
 
   // Risiko-Hinweis für Stücke auf der Liste (gilt nicht nur für die aktuelle Auswahl)
   const riskant = teller.filter((s, i) => aufgeloest[i].plan.risiko);
+  const lamm = riskant.some((s) => finde(FLEISCH, s.fleischId).tier === 'Lamm');
   $('teller-risiko').hidden = !riskant.length;
   $('teller-risiko').textContent = riskant.length
-    ? `⚠️ Unter 63 °C: ${riskant.map((s) => stueckLabel(s, teller)).join(', ')}. Für Schwangere, Kleinkinder, ältere und immungeschwächte Menschen wird mindestens 63 °C empfohlen.`
+    ? `⚠️ Unter 63 °C: ${riskant.map((s) => stueckLabel(s, teller)).join(', ')}. Für Schwangere, Kleinkinder, ältere und immungeschwächte Menschen wird mindestens 63 °C empfohlen. Rosa nur mit ganzen, unbehandelten Stücken (nicht nadeliert, gespritzt, gerollt oder zusammengesetzt).${lamm ? ' 🐑 Lamm: Toxoplasmose-Risiko – Schwangere besser well done.' : ''}`
     : '';
+
+  // Passen die Stücke (noch) zusammen? Die Anpassung kann sich seit dem Hinzufügen geändert haben.
+  const problem = n ? listenProblem(aufgeloest, teller) : null;
+  $('teller-konflikt').hidden = !problem;
+  $('teller-konflikt').textContent = problem || '';
 
   // Zeitplan-Vorschau
   const plan = $('teller-plan');
   plan.hidden = n < 2;
-  if (n >= 2 && aufgeloest[0].methode === 'sousvide') {
+  if (n >= 2 && problem) {
+    plan.hidden = true;
+  } else if (n >= 2 && aufgeloest[0].methode === 'sousvide') {
     const bad = aufgeloest[0].plan.tBad;
     const ab = Math.max(...aufgeloest.map((r) => r.plan.minSek));
     plan.replaceChildren(
-      el('b', { text: `🛁 Alle Beutel gleichzeitig ins ${grad(bad)}-Bad` }),
-      el('ul', {}, teller.map((s, i) => el('li', {},
+      el('b', { text: `🛁 Alle Beutel gleichzeitig ins ${grad(bad)}\u2011Bad` }),
+      el('ul', { class: 'sv' }, teller.map((s, i) => el('li', {},
         el('span', { class: 'zeit-spalte', text: dauer(aufgeloest[i].plan.minSek) }),
         `${finde(FARBEN, s.farbeId).punkt} ${stueckLabel(s, teller)} fertig (bis ${dauer(aufgeloest[i].plan.maxSek)})`))),
       el('p', { class: 'klein', text: `🍽️ Alle fertig ab ca. ${dauer(ab)}. Die App sagt bei jedem Stück einzeln Bescheid.` }));
@@ -381,6 +401,31 @@ function renderTeller() {
         `${finde(FARBEN, s.farbeId).punkt} ${stueckLabel(s, teller)} auflegen`))),
       el('p', { class: 'klein', text: `🍽️ Alle gleichzeitig servierfertig nach ca. ${fmt(gesamtSek)} Min.` }));
   }
+  return problem;
+}
+
+/** Kurze Sous-vide-Hinweise für Liste und Timer-Karte. */
+const svKuerzel = (plan) => (plan.methode === 'sousvide' ? [
+  plan.hartMax ? `⏱️ max. ${dauer(SOUS_VIDE.kurzMaxSek)} im Bad` : null,
+  plan.anbratenPflicht ? '🔥 Anbraten Pflicht' : null,
+] : []);
+const risikoKurz = (r) => `⚠️ unter 63 °C – nicht für Risikogruppen · nur ganze, unbehandelte Stücke${r.fleisch.tier === 'Lamm' ? ' · 🐑 Toxoplasmose' : ''}`;
+
+/**
+ * Können diese Stücke gemeinsam starten? Gesperrte Stücke, gemischte Methoden und
+ * (Sous-vide) verschiedene Badtemperaturen werden abgelehnt. null = alles in Ordnung.
+ */
+function listenProblem(aufgeloest, cfgs) {
+  const name = (i) => stueckLabel(cfgs[i], cfgs);
+  const gesperrt = aufgeloest.findIndex((r) => !r.plan.machbar);
+  if (gesperrt >= 0) return `⛔ ${name(gesperrt)}: ${aufgeloest[gesperrt].plan.grund}`;
+  if (new Set(aufgeloest.map((r) => r.methode)).size > 1) {
+    return '⚠️ Auf der Liste stehen Sous-vide- und Pfannen-/Grill-Stücke – bitte getrennt garen (zwei Durchgänge).';
+  }
+  if (aufgeloest[0]?.methode === 'sousvide' && new Set(aufgeloest.map((r) => r.plan.tBad)).size > 1) {
+    return `⚠️ Im selben Bad geht nur eine Temperatur: ${aufgeloest.map((r, i) => `${name(i)} ${grad(r.plan.tBad)}`).join(', ')}. Bitte ein Stück entfernen oder getrennt garen.`;
+  }
+  return null;
 }
 
 /** Passt die aktuelle Auswahl zu den Stücken auf der Liste (gleiche Methode, beim Sous-vide gleiche Badtemperatur)? */
@@ -444,13 +489,30 @@ const lauf = {
 const GESICHERT = [
   'id', 'cfg', 'label', 'stufe', 'plan', 'tStartGemessen', 'faktorSnapshot', 'schritte', 'idx', 'endeUm',
   'gekochtSek', 'neinAnzahl', 'ersteErfasst', 'ersteMessung', 'gekochtBeiErster', 'rausErledigt', 'messungId',
-  'feedback', 'checkSeit', 'messwarteSek', 'halteAbgelaufen', 'aufgeholt',
+  'feedback', 'checkSeit', 'messwarteSek', 'halteAbgelaufen', 'aufgeholt', 'badSeit', 'badSek',
 ];
+
+/**
+ * Bis wann ein gespeicherter Lauf wiederhergestellt wird: geplantes Ende aller Stücke plus Puffer
+ * (Pfanne/Grill 3 h, Sous-vide 12 h – lange Badzeiten dürfen nicht verloren gehen).
+ */
+function laufGueltigBis(jetzt = Date.now()) {
+  let ende = jetzt;
+  let sousVide = false;
+  for (const st of lauf.stuecke) {
+    if (st.plan?.methode === 'sousvide') sousVide = true;
+    const s = aktSchritt(st);
+    let t = jetzt + (s.typ === 'timer' ? Math.max(0, restMs(st, jetzt)) : 0);
+    for (const x of st.schritte.slice(st.idx + 1)) if (x.typ === 'timer') t += x.sek * 1000;
+    ende = Math.max(ende, t);
+  }
+  return ende + (sousVide ? SOUS_VIDE.laufPufferSek * 1000 : LAUF_MAX_ALTER_MS);
+}
 
 function sichereLauf() {
   if (!lauf.aktiv) return;
   speicher.setLauf({
-    version: 1, gespeichertUm: Date.now(), alleFertig: lauf.alleFertig, pausiertSeit: lauf.pausiertSeit,
+    version: 1, gespeichertUm: Date.now(), gueltigBis: laufGueltigBis(), alleFertig: lauf.alleFertig, pausiertSeit: lauf.pausiertSeit,
     urteile: lauf.urteile,
     stuecke: lauf.stuecke.map((st) => Object.fromEntries(GESICHERT.map((k) => [k, st[k] ?? null]))),
   });
@@ -479,7 +541,8 @@ function starte() {
     if (name || !auswahlAufListe()) {
       const f = finde(FLEISCH, auswahl.fleischId);
       const was = `${name ? `„${name}“: ` : ''}${f.name} ${cm(auswahl.dicke)}`;
-      if (confirm(`${was} ist noch nicht auf der Liste. Auch mitgaren?`)) fuegeHinzu();
+      // Passt das Stück nicht dazu (oder ist gesperrt), auf der Auswahl bleiben statt ohne es zu starten
+      if (confirm(`${was} ist noch nicht auf der Liste. Auch mitgaren?`) && !fuegeHinzu()) return;
     }
   }
 
@@ -494,8 +557,9 @@ function starte() {
     speicher.setTeller(teller);
   }
   const aufgeloest = konfigs.map(aufloesen);
-  const nichtMachbar = aufgeloest.find((r) => !r.plan.machbar);
-  if (nichtMachbar) { toast(`⛔ ${nichtMachbar.fleisch.name}: ${nichtMachbar.plan.grund}`); return; }
+  // Erneut prüfen: Die Liste ist gespeichert, die persönliche Anpassung kann sich seitdem geändert haben
+  const problem = listenProblem(aufgeloest, konfigs);
+  if (problem) { toast(problem); renderAuswahl(); return; }
   const sousVide = aufgeloest[0].methode === 'sousvide';
   // Sous-vide: alle Beutel gleichzeitig ins Bad (nichts Kaltes nachlegen) – kein Versatz
   const versatz = sousVide ? aufgeloest.map(() => 0) : zeitplan(aufgeloest.map((r) => r.plan)).versatz;
@@ -514,7 +578,7 @@ function starte() {
       endeUm: erster.typ === 'timer' ? jetzt + erster.sek * 1000 : null,
       gekochtSek: 0, neinAnzahl: 0, ersteErfasst: false, ersteMessung: null, gekochtBeiErster: null,
       rausErledigt: false, messungId: null, feedback: null, checkSeit: erster.typ === 'check' ? jetzt : null, messwarteSek: 0,
-      halteAbgelaufen: false, aufgeholt: false, dom: null, renderIdx: -1, sperreBis: 0,
+      halteAbgelaufen: false, aufgeholt: false, badSeit: null, badSek: null, dom: null, renderIdx: -1, sperreBis: 0,
     };
   });
   lauf.alleFertig = false;
@@ -524,11 +588,30 @@ function starte() {
   laufStarten();
 }
 
+/** Ein zu alter Lauf wird beendet – nie kommentarlos, wenn noch ein Sicherheitsschritt offen war. */
+function meldeVerworfen(l) {
+  const offen = (Array.isArray(l?.stuecke) ? l.stuecke : []).filter((d) => Array.isArray(d?.schritte)
+    && d.schritte.slice(Math.max(0, d.idx | 0)).some((x) => x?.typ === 'check' && (x.art === 'halte' || x.art === 'svraus')));
+  if (!offen.length) { if (l?.stuecke?.length && !l.alleFertig) toast('⌛ Der letzte Garvorgang war zu alt und wurde beendet.'); return; }
+  const kontrolle = offen.some((d) => d.plan?.sicher);
+  const kurz = offen.some((d) => d.plan?.hartMax);
+  alert([
+    '⌛ Der letzte Garvorgang war zu alt und wurde beendet, bevor er abgeschlossen war.',
+    kontrolle ? '🛡️ Schwein/Geflügel: Die Kontrollmessung (Kern ≥ 70 °C) fehlt – ohne sie bitte nicht essen.' : null,
+    kurz ? `⛔ Sous-vide unter ${SOUS_VIDE.kurzUnter} °C: Die Höchstzeit im Bad ist weit überschritten – bitte nicht mehr essen.` : null,
+  ].filter(Boolean).join('\n\n'));
+}
+
 /** Nach Neuladen oder Beenden der App durch iOS: laufenden Garvorgang fortsetzen. */
 function wiederherstellen() {
   const l = speicher.lauf();
   if (!l) return false;
-  if (!(Date.now() - l.gespeichertUm < LAUF_MAX_ALTER_MS) || !l.stuecke.length) { speicher.loescheLauf(); return false; }
+  const bis = Number.isFinite(l.gueltigBis) ? l.gueltigBis : l.gespeichertUm + LAUF_MAX_ALTER_MS;   // ältere Speicherstände
+  if (!(Date.now() < bis) || !Array.isArray(l.stuecke) || !l.stuecke.length) {
+    meldeVerworfen(l);
+    speicher.loescheLauf();
+    return false;
+  }
   try {
     lauf.stuecke = l.stuecke.map((d) => {
       if (!d.cfg || !Array.isArray(d.schritte) || !d.schritte.length || !d.plan) throw new Error('unvollständig');
@@ -563,7 +646,39 @@ async function wachHalten() {
 const aktSchritt = (st) => st.schritte[st.idx];
 /** Ein Prüfschritt, der sofort Aufmerksamkeit braucht (Vorheizen des Bads zählt nicht dazu). */
 const wartetDringend = (st) => { const s = aktSchritt(st); return s.typ === 'check' && s.art !== 'bad'; };
-const restMs = (st, jetzt = Date.now()) => (lauf.pausiertSeit ? st.endeUm - lauf.pausiertSeit : st.endeUm - jetzt);
+/** Sous-vide: Im Wasserbad läuft die Zeit immer weiter – auch in der Pause der App. */
+const imBad = (s) => !!s && s.typ === 'timer' && !!s.imBad;
+/** Schritte in Echtzeit: Bad-Timer, Vorheizen und „Raus aus dem Bad“ (der Beutel liegt noch im Wasser). */
+const echtzeit = (s) => !!s && (imBad(s) || s.art === 'svraus' || s.art === 'bad');
+/** Steht die Uhr dieses Stücks gerade still (Pause)? */
+const angehalten = (st) => !!lauf.pausiertSeit && !echtzeit(aktSchritt(st));
+const restMs = (st, jetzt = Date.now()) => (angehalten(st) ? st.endeUm - lauf.pausiertSeit : st.endeUm - jetzt);
+/** Laufende Timer, der nächste zuerst. */
+const laufendeTimer = (jetzt = Date.now()) => lauf.stuecke.filter((st) => aktSchritt(st).typ === 'timer')
+  .sort((a, b) => restMs(a, jetzt) - restMs(b, jetzt));
+/** Startzeit des nächsten Schritts nach einer Eingabe: Bad-Schritte sofort, sonst ab Pausenbeginn (wird beim Fortsetzen verschoben). */
+const startNaechster = (st, jetzt = Date.now()) => (echtzeit(st.schritte[st.idx + 1]) ? jetzt : (lauf.pausiertSeit || jetzt));
+/** Lässt sich bei diesem Stück etwas anhalten? Das Wasserbad nicht. */
+const pausierbar = (st) => { const s = aktSchritt(st); return (s.typ === 'timer' && !s.imBad) || (s.typ === 'check' && s.art === 'raus'); };
+
+/** Sous-vide: Wie lange liegt bzw. lag das Stück im Bad (Sekunden)? null = unbekannt oder noch nicht im Bad. */
+function badZeitSek(st, jetzt = Date.now()) {
+  if (st.badSek != null) return st.badSek;
+  if (!Number.isFinite(st.badSeit)) return null;
+  const s = aktSchritt(st);
+  return imBad(s) || s.art === 'svraus' ? Math.max(0, (jetzt - st.badSeit) / 1000) : null;
+}
+
+/** Unter 55 °C: Warnung, sobald die harte Höchstzeit im Bad überschritten ist (sonst null). */
+function grenzWarnung(st, jetzt = Date.now()) {
+  if (!st.plan?.hartMax) return null;
+  const sek = badZeitSek(st, jetzt);
+  if (sek == null || sek <= SOUS_VIDE.kurzMaxSek + SOUS_VIDE.kulanzSek) return null;
+  const wie = `${dauer(sek)} im ${grad(st.plan.tBad)}\u2011Bad`;
+  return sek > SOUS_VIDE.verwerfenAbSek
+    ? `⛔ ${wie} – mehr als ${dauer(SOUS_VIDE.verwerfenAbSek)} unter ${SOUS_VIDE.kurzUnter} °C. Nach der 4-Stunden-Regel bitte nicht mehr essen.`
+    : `⚠️ ${wie} – länger als die Sicherheitsgrenze (${dauer(SOUS_VIDE.kurzMaxSek)} unter ${SOUS_VIDE.kurzUnter} °C). Sofort scharf anbraten und gleich essen – nicht für Risikogruppen.`;
+}
 
 /** Schritt beenden und zum nächsten wechseln. startUm = Startzeitpunkt des nächsten Schritts. */
 function naechsterSchritt(st, startUm) {
@@ -582,13 +697,15 @@ const gesperrt = (st, idx) => st.idx !== idx || Date.now() < st.sperreBis;
 function ticke() {
   if (!lauf.aktiv) return;
   const jetzt = Date.now();
-  if (!lauf.pausiertSeit) {
+  const pausiert = !!lauf.pausiertSeit;
+  {
     const ansagen = [];
     for (const st of lauf.stuecke) {
-      // Alle abgelaufenen Timer nachholen (z. B. nach Hintergrund), Folge-Timer schließen nahtlos an
+      // Alle abgelaufenen Timer nachholen (z. B. nach Hintergrund), Folge-Timer schließen nahtlos an.
+      // In der Pause laufen nur die Bad-Timer weiter (das Wasserbad hält nicht an).
       let s = aktSchritt(st);
       let sicherung = 0;
-      while (s.typ === 'timer' && jetzt >= st.endeUm && sicherung++ < 50) {
+      while (s.typ === 'timer' && (!pausiert || s.imBad) && jetzt >= st.endeUm && sicherung++ < 50) {
         const spaet = jetzt - st.endeUm > SPAET_MS;
         if (s.kochen) { st.gekochtSek += s.sek; if (spaet) st.aufgeholt = true; }
         if (s.halte) st.halteAbgelaufen = true;   // nur ein tatsächlich abgelaufener Timer zählt
@@ -605,7 +722,8 @@ function ticke() {
     if (ansagen.length) {
       signal(ansagen.join(' '));
       lauf.letzteErinnerung = jetzt;
-    } else if (lauf.stuecke.some(wartetDringend) && jetzt - lauf.letzteErinnerung > 20000) {
+    } else if (lauf.stuecke.some((st) => wartetDringend(st) && (!pausiert || aktSchritt(st).art === 'svraus'))
+      && jetzt - lauf.letzteErinnerung > 20000) {
       piep(2);   // Erinnerung: es wartet eine Messung bzw. „Raus aus dem Bad“
       lauf.letzteErinnerung = jetzt;
     }
@@ -639,6 +757,7 @@ function baueStueckKarten() {
     const dom = {
       name: el('b', { class: 's-name' }),
       info: el('small', { class: 's-info' }),
+      hinweis: el('small', { class: 's-hinweis warn-text' }),
       nr: el('small', { class: 's-nr' }),
       titel: el('span', { class: 's-titel' }),
       zeit: el('span', { class: 's-zeit' }),
@@ -646,6 +765,7 @@ function baueStueckKarten() {
       text: el('p', { class: 's-text' }),
       aktion: el('div', { class: 's-aktion' }),
       danach: el('p', { class: 's-danach klein' }),
+      warn: el('p', { class: 's-warn', hidden: true, role: 'alert' }),
     };
     st.dom = dom;
     st.renderIdx = -1;
@@ -653,14 +773,20 @@ function baueStueckKarten() {
     dom.info.textContent = [
       `${st.fleisch.emoji} ${st.fleisch.name}`, cm(st.cfg.dicke), `${st.plan.stufenLabel} ${zielText(st.plan)}`,
       st.plan.methode === 'sousvide' ? `🛁 Bad ${grad(st.plan.tBad)}` : st.geraet.name,
-      st.plan.risiko ? '⚠️ unter 63 °C' : null,
     ].filter(Boolean).join(' · ');
+    // Sicherheits-Kürzel auch bei einem einzelnen Stück sichtbar (dort ist die Info-Zeile ausgeblendet)
+    dom.hinweis.textContent = [
+      ...svKuerzel(st.plan),
+      st.plan.risiko ? '⚠️ unter 63 °C · nur ganze Stücke' : null,
+      st.plan.risiko && st.fleisch.tier === 'Lamm' ? '🐑 Toxoplasmose' : null,
+    ].filter(Boolean).join(' · ');
+    dom.hinweis.hidden = !dom.hinweis.textContent;
     dom.karte = el('article', { class: 'stueck', style: `--farbe:${st.farbe.css}` },
       el('header', { class: 's-kopf' }, dom.name, dom.nr),
-      dom.info,
+      dom.info, dom.hinweis,
       el('div', { class: 's-zeile' }, dom.titel, dom.zeit),
       el('div', { class: 'balken' }, dom.balken),
-      dom.text, dom.aktion, dom.danach);
+      dom.text, dom.warn, dom.aktion, dom.danach);
     return dom.karte;
   }));
 }
@@ -697,7 +823,7 @@ function renderTimer() {
     }
     if (s.typ === 'timer' && s.uhr) {
       // Sous-vide: Uhrzeit mitnennen („fertig ab 18:45“, „bis 19:45“)
-      const ende = uhrzeit(lauf.pausiertSeit ? jetzt + restMs(st, jetzt) : st.endeUm);
+      const ende = uhrzeit(jetzt + restMs(st, jetzt));
       setText(d.text, s.uhr === 'fertig' ? `${s.text} Fertig ab ${ende}.` : `${s.text} ${s.uhr === 'bis' ? 'bis' : 'um'} ${ende}.`);
     }
     if (s.typ === 'timer') {
@@ -705,15 +831,19 @@ function renderTimer() {
       setText(d.zeit, fmt(rest / 1000));
       d.balken.style.width = `${Math.min(100, Math.max(0, 100 * (1 - rest / (s.sek * 1000))))}%`;
     }
+    // Sous-vide unter 55 °C: Überschreitung der Höchstzeit deutlich und dauerhaft zeigen
+    const warnung = grenzWarnung(st, jetzt);
+    d.warn.hidden = !warnung;
+    if (warnung) setText(d.warn, warnung);
   }
   if (neueAnsagen.length) setText($('sr-ansage'), neueAnsagen.join('. '));
 
   // Held: das Dringendste zuerst
   const checks = lauf.stuecke.filter(wartetDringend);
   const badWartet = lauf.stuecke.find((st) => aktSchritt(st).art === 'bad');
-  const timer = lauf.stuecke.filter((st) => aktSchritt(st).typ === 'timer')
-    .sort((a, b) => a.endeUm - b.endeUm);
+  const timer = laufendeTimer(jetzt);
   const pausiert = lauf.pausiertSeit ? '⏸️ Pausiert · ' : '';
+  let heldAngehalten = false;
   $('held').classList.toggle('dringend', checks.length > 0);
   if (lauf.alleFertig) {
     setText($('h-wer'), n > 1 ? 'Alle Stücke sind fertig' : `${lauf.stuecke[0].fleisch.emoji} ${lauf.stuecke[0].fleisch.name}`);
@@ -724,10 +854,14 @@ function renderTimer() {
     $('t-neu').disabled = jetzt < lauf.neuSperreBis;
     $('t-wake').hidden = true;
   } else if (checks.length) {
-    const svRaus = checks.every((st) => aktSchritt(st).art === 'svraus');
-    setText($('h-wer'), pausiert + (n > 1 ? checks.map((st) => `${st.farbe.punkt} ${st.label}`).join(' · ') : ''));
-    setText($('h-titel'), svRaus ? '🛁 Raus aus dem Bad!'
-      : checks.length > 1 ? '🌡️ Jetzt messen!' : `🌡️ ${aktSchritt(checks[0]).titel}`);
+    const raus = checks.filter((st) => aktSchritt(st).art === 'svraus').length;
+    const gemischt = raus > 0 && raus < checks.length;
+    // Gemischt (einer muss raus, einer gemessen werden): je Stück sagen, was zu tun ist
+    const wer = (st) => `${gemischt ? (aktSchritt(st).art === 'svraus' ? '🛁 ' : '🌡️ ') : ''}${st.farbe.punkt} ${st.label}`;
+    setText($('h-wer'), pausiert + (n > 1 ? checks.map(wer).join(' · ') : ''));
+    setText($('h-titel'), gemischt ? '🛁 Raus & 🌡️ messen!'
+      : raus ? '🛁 Raus aus dem Bad!'
+        : checks.length > 1 ? '🌡️ Jetzt messen!' : `🌡️ ${aktSchritt(checks[0]).titel}`);
     $('h-zeit').hidden = true;
   } else if (badWartet) {
     setText($('h-wer'), pausiert + `Stick auf ${grad(badWartet.plan.tBad)} stellen`);
@@ -736,14 +870,15 @@ function renderTimer() {
   } else if (timer.length) {
     const st = timer[0];
     const s = aktSchritt(st);
-    setText($('h-wer'), pausiert + (n > 1 ? `Als Nächstes: ${st.farbe.punkt} ${st.label}` : `${st.fleisch.emoji} ${st.label} · ${cm(st.cfg.dicke)} · ${st.plan.stufenLabel}`));
+    heldAngehalten = angehalten(st);
+    setText($('h-wer'), (lauf.pausiertSeit ? (heldAngehalten ? pausiert : '⏸️ Pause – das Bad läuft weiter · ') : '') + (n > 1 ? `Als Nächstes: ${st.farbe.punkt} ${st.label}` : `${st.fleisch.emoji} ${st.label} · ${cm(st.cfg.dicke)} · ${st.plan.stufenLabel}`));
     setText($('h-titel'), n > 1 ? `${s.titel} → ${s.signal}` : s.titel);
     $('h-zeit').hidden = false;
     setText($('h-zeit'), fmt(restMs(st, jetzt) / 1000));
     $('h-zeit').classList.toggle('lang', restMs(st, jetzt) >= 3600 * 1000);
   }
   if (!lauf.alleFertig) { $('t-steuer').hidden = false; $('t-neu').hidden = true; }
-  $('h-zeit').classList.toggle('pausiert', !!lauf.pausiertSeit);
+  $('h-zeit').classList.toggle('pausiert', heldAngehalten);
   $('t-ton').hidden = !(lauf.aktiv && !lauf.alleFertig && !tonBereit());
   renderLaufleiste();
 }
@@ -814,10 +949,11 @@ function baueFeedback(st, idx) {
   let ruheFeld = null;
   let notizFeld = null;
   if (mess) {
-    ruheFeld = el('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', class: 'temp-eingabe', placeholder: '°C', 'aria-label': 'Kerntemperatur nach der Ruhezeit' });
+    const wann = st.plan.methode === 'sousvide' ? 'beim Servieren' : 'nach der Ruhezeit';   // Sous-vide: kein Ruhen
+    ruheFeld = el('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', class: 'temp-eingabe', placeholder: '°C', 'aria-label': `Kerntemperatur ${wann}` });
     notizFeld = el('input', { type: 'text', maxlength: '120', class: 'notiz', placeholder: 'Notiz, z. B. Herdstufe 7, Gusseisen', 'aria-label': 'Notiz' });
     teile.push(
-      el('label', { class: 'temp-zeile' }, el('span', { text: '🌡️ Kern nach der Ruhezeit:' }), ruheFeld),
+      el('label', { class: 'temp-zeile' }, el('span', { text: `🌡️ Kern ${wann}:` }), ruheFeld),
       notizFeld);
   }
   const speichere = (urteil) => {
@@ -877,7 +1013,7 @@ function ueberspringe(st, idx) {
   if (s.typ !== 'timer' || s.halte) return;   // BfR-Haltephase ist nie überspringbar
   const vergangen = Math.max(0, s.sek - Math.max(0, restMs(st)) / 1000);
   if (s.kochen) st.gekochtSek += vergangen;
-  naechsterSchritt(st, lauf.pausiertSeit || Date.now());
+  naechsterSchritt(st, startNaechster(st));
   renderTimer();
 }
 
@@ -906,20 +1042,41 @@ function antworte(st, ja, gemessen, feld = null) {
   tonEntsperren();
   const s = aktSchritt(st);
   if (s.typ !== 'check') return;
-  const ende = lauf.pausiertSeit || Date.now();
+  const jetzt = Date.now();
+  const ende = lauf.pausiertSeit || jetzt;
   const sicher = st.fleisch.art === 'sicher';
+  const sousVide = st.plan.methode === 'sousvide';
   const hat = Number.isFinite(gemessen);
 
   if (s.art === 'bad') {
-    // Gemeinsames Bad: alle Stücke starten jetzt
-    for (const x of lauf.stuecke) if (aktSchritt(x).art === 'bad') naechsterSchritt(x, ende);
+    // Gemeinsames Bad: alle Stücke starten jetzt (Echtzeit – das Bad hält in keiner Pause an)
+    for (const x of lauf.stuecke) {
+      if (aktSchritt(x).art !== 'bad') continue;
+      x.badSeit = jetzt;
+      naechsterSchritt(x, jetzt);
+    }
     renderTimer();
     return;
   }
   if (s.art === 'svraus') {
-    if (!st.rausErledigt) { st.rausErledigt = true; erfasseMessung(st, null, ende); }
-    naechsterSchritt(st, ende);
+    // Bis zur Bestätigung lag der Beutel weiter im Bad → zählt als Badzeit
+    if (Number.isFinite(st.checkSeit)) {
+      const warte = Math.max(0, (jetzt - st.checkSeit) / 1000);
+      st.gekochtSek += warte;
+      st.messwarteSek = (st.messwarteSek || 0) + warte;
+    }
+    st.checkSeit = null;
+    if (Number.isFinite(st.badSeit) && st.badSek == null) st.badSek = Math.round((jetzt - st.badSeit) / 1000);
+    if (!st.rausErledigt) { st.rausErledigt = true; erfasseMessung(st, null, jetzt); }
+    naechsterSchritt(st, startNaechster(st, jetzt));
     renderTimer();
+    return;
+  }
+
+  // Sous-vide: Im Bad kann der Kern nicht (nennenswert) heißer werden als das Wasser → Fehleingabe oder Fehlmessung
+  if (sousVide && hat && gemessen > st.plan.tBad + SOUS_VIDE.messToleranz) {
+    toast(`🌡️ ${grad(gemessen)} ist heißer als das Bad (${grad(st.plan.tBad)}) – bitte Eingabe und Thermometer prüfen und neu messen.`);
+    if (feld) { feld.setAttribute('aria-invalid', 'true'); feld.focus(); }
     return;
   }
 
@@ -975,14 +1132,19 @@ function antworte(st, ja, gemessen, feld = null) {
   } else {
     if (s.art === 'halte') {
       st.halteAbgelaufen = false;
-      if (st.messungId && hat) speicher.aendereMessung(st.messungId, { rausGemessen: gemessen });
+      // Sous-vide: Die Kontrollmessung ist zugleich die Temperatur beim Herausnehmen.
+      // Pfanne/Grill: „Kern beim Rausnehmen“ bleibt der Wert von vor der Haltephase.
+      if (st.messungId && hat) {
+        speicher.aendereMessung(st.messungId, sousVide
+          ? { rausGemessen: gemessen, kontrolleGemessen: gemessen } : { kontrolleGemessen: gemessen });
+      }
     }
     if (s.art === 'raus' && !st.rausErledigt) {
       st.rausErledigt = true;
       erfasseMessung(st, hat ? gemessen : null, ende);
     }
   }
-  naechsterSchritt(st, ende);
+  naechsterSchritt(st, startNaechster(st, jetzt));
   renderTimer();
 }
 
@@ -1032,6 +1194,7 @@ function erfasseMessung(st, rausGemessen, zeitpunkt) {
     messModus: !!einstellungen.messModus, notiz: '',
     messwarteSek: Math.round(st.messwarteSek || 0), ruheSek: p.ruheSek, aufgeholt: !!st.aufgeholt,
     methode: sousVide ? 'Sous-vide' : 'Pfanne/Grill', tBad: sousVide ? p.tBad : null,
+    badSek: sousVide ? (st.badSek ?? null) : null, kontrolleGemessen: null,
   };
   if (speicher.neueMessung(messung)) st.messungId = messung.id;
   if (neuerFaktor != null && Math.abs(neuerFaktor - st.faktorSnapshot) >= 0.01) {
@@ -1052,11 +1215,18 @@ function pause() {
     const delta = Date.now() - lauf.pausiertSeit;
     for (const st of lauf.stuecke) {
       const s = aktSchritt(st);
+      if (echtzeit(s)) continue;   // Wasserbad: lief in der Pause weiter, nichts verschieben
       if (s.typ === 'timer') st.endeUm += delta;
       if (s.typ === 'check' && Number.isFinite(st.checkSeit)) st.checkSeit += delta;
     }
     lauf.pausiertSeit = null;
   } else {
+    if (!lauf.stuecke.some(pausierbar)) {
+      const bad = lauf.stuecke.some((st) => echtzeit(aktSchritt(st)) && aktSchritt(st).art !== 'bad');
+      toast(bad ? '🛁 Das Wasserbad läuft weiter – die Zeit im Bad lässt sich nicht anhalten.'
+        : '⏸️ Gerade läuft keine Uhr, die sich anhalten lässt.');
+      return;
+    }
     lauf.pausiertSeit = Date.now();
   }
   aktualisierePauseKnopf();

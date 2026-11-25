@@ -43,6 +43,26 @@ const text = (page, sel) => page.locator(sel).first().textContent();
 const sekunden = (zeit) => zeit.trim().split(':').map(Number).reduce((a, x) => a * 60 + x, 0);   // m:ss oder h:mm:ss
 const setzeDicke = (page, cm) => page.$eval('#dicke', (e, v) => { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); }, String(cm));
 const abbrechen = async (page) => { await page.click('#t-abbruch'); assert.equal(await page.isVisible('#v-auswahl'), true); };
+const lies = (page, key) => page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key);
+const letzteMessung = async (page) => (await lies(page, 'meatagain.messungen.v1')).at(-1);
+/**
+ * Simuliert „iOS hat die App im Hintergrund beendet und sie wird X Stunden später geöffnet“:
+ * gespeicherten Lauf um X h in die Vergangenheit schieben, weiteres Speichern (pagehide) verhindern, neu laden.
+ */
+async function spaeterOeffnen(page, stunden) {
+  await page.evaluate((h) => {
+    const k = 'meatagain.lauf.v1';
+    const l = JSON.parse(localStorage.getItem(k));
+    const d = h * 3600 * 1000;
+    const schiebe = (o, felder) => { for (const f of felder) if (Number.isFinite(o[f])) o[f] -= d; };
+    schiebe(l, ['gespeichertUm', 'gueltigBis', 'pausiertSeit']);
+    for (const st of l.stuecke) schiebe(st, ['endeUm', 'checkSeit', 'badSeit']);
+    localStorage.setItem(k, JSON.stringify(l));
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, v) { if (key !== k) orig.call(this, key, v); };
+  }, stunden);
+  await page.reload();
+}
 const shot = async (page, name) => { if (AUSGABE) await page.screenshot({ path: path.join(AUSGABE, `${name}.png`), fullPage: true }); };
 
 async function einzelStueckGenuss(page) {
@@ -145,6 +165,9 @@ async function sicherheitsAblauf(page) {
   await vorspulen(page, 121);
   await page.fill('.temp-eingabe', '71');
   await page.click('button:has-text("Ja")');   // Kontrolle ok
+  const m = await letzteMessung(page);
+  assert.equal(m.rausGemessen, 73.5, 'Pfanne: „Kern beim Rausnehmen“ bleibt der Wert vor der Haltephase');
+  assert.equal(m.kontrolleGemessen, 71, 'Kontrollmessung eigenes Feld');
   await vorspulen(page, 900);
   assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
   await page.click('#t-neu');
@@ -282,7 +305,9 @@ async function sousVideRind(page) {
   assert.match(await text(page, '#stufen-liste button'), /Bad 50 °C/);
   await setzeDicke(page, 4);
   assert.equal(await page.isDisabled('#start'), true, '4 cm rare: zu lange unter 55 °C');
-  assert.match(await text(page, '#sv-warn'), /höchstens 3 h/);
+  assert.match(await text(page, '#sv-warn'), /höchstens 3\u00a0h/);
+  assert.match(await text(page, '#sv-warn'), /Spielraum/);
+  assert.equal(await text(page, '#p-ruhe'), '–', 'gesperrt: kein Zeitfenster');
   await page.click('#start-liste button:has-text("Gefroren")');
   await setzeDicke(page, 2);
   assert.match(await text(page, '#sv-warn'), /Gefroren/);
@@ -297,6 +322,11 @@ async function sousVideRind(page) {
   await page.click('text=Hähnchenbrust');
   await page.click('#hinzu');
   assert.equal(await page.locator('.teller-eintrag').count(), 1, 'Hähnchen (72 °C) passt nicht ins 50-°C-Bad');
+  assert.match(await text(page, '#toast'), /nur eine Temperatur/);
+  page.dialoge.length = 0;
+  await page.click('#start');
+  assert.match(page.dialoge.join(' | '), /Auch mitgaren/);
+  assert.equal(await page.isVisible('#v-auswahl'), true, '„Ja“, aber Stück passt nicht ins Bad → nicht ohne es starten');
   assert.match(await text(page, '#toast'), /nur eine Temperatur/);
   await page.click('#teller-leeren');
   await page.click('text=Rumpsteak');
@@ -354,12 +384,111 @@ async function sousVideHaehnchen(page) {
   assert.equal(await text(page, '.s-titel'), 'Zurück ins Bad', 'unter 70 °C → zurück ins Bad');
   assert.equal(await page.locator('.s-aktion .weiter').count(), 0);
   await springe(page, 15 * 60 + 1);
+  // Heißer als das 72-°C-Bad geht nicht → Tippfehler/Fehlmessung, nicht als „Ja“ werten
+  await page.fill('.temp-eingabe', '95');
+  await page.click('button:has-text("Ja")');
+  assert.match(await text(page, '#h-titel'), /Kontrollmessung/, '95 °C im 72-°C-Bad wird nicht angenommen');
+  assert.match(await text(page, '#toast'), /heißer als das Bad/);
   await page.fill('.temp-eingabe', '71');
   await page.click('button:has-text("Ja")');
   assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1');
+  const m = await letzteMessung(page);
+  assert.equal(m.rausGemessen, 71);
+  assert.equal(m.kontrolleGemessen, 71);
+  assert.ok(m.badSek > 0, 'tatsächliche Badzeit gespeichert');
   await vorspulen(page, 100);
   assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
   await page.click('#t-neu');
+  await page.click('#methode-liste button:has-text("Pfanne")');
+}
+
+async function sousVidePauseHoechstzeit(page) {
+  // Rumpsteak rare, 50 °C: harte Grenze 3 h – die Pause darf sie nicht verschieben
+  // (medium rare liegt hier schon bei 55 °C: persönliche Anpassung aus „Einzelstück Genuss“)
+  await page.click('text=Rumpsteak');
+  await page.click('#methode-liste button:has-text("Sous-vide")');
+  await page.locator('#stufen-liste button').first().click();
+  assert.match(await text(page, '#stufen-liste button[aria-pressed="true"]'), /Bad 50 °C/);
+  await setzeDicke(page, 2.5);
+  await page.click('#start');
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Bad ist warm")');
+  assert.match(await text(page, '.s-hinweis'), /max\. 3\u00a0h im Bad/, 'Karte nennt die Höchstzeit');
+  assert.equal(await page.isVisible('.s-hinweis'), true, 'auch bei einem einzelnen Stück sichtbar');
+  await vorspulen(page, 1);
+  await page.click('#t-pause');
+  assert.match(await text(page, '#toast'), /Wasserbad läuft weiter/);
+  assert.equal(await text(page, '#t-pause'), '⏸️ Pause', 'im Bad gibt es keine Pause');
+  await springe(page, 3 * 3600 + 120);
+  assert.equal(await text(page, '#h-titel'), '🛁 Raus aus dem Bad!', 'nach 3 h raus – nicht später');
+  assert.match(await text(page, '.s-warn'), /Sicherheitsgrenze/, 'Überschreitung wird gemeldet');
+  await springe(page, 3600);
+  assert.match(await text(page, '.s-warn'), /nicht mehr essen/, 'über 4 h unter 55 °C');
+  await page.click('button:has-text("Ist raus")');
+  assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1');
+  assert.equal(await page.isVisible('.s-warn'), true, 'Warnung bleibt sichtbar');
+  const m = await letzteMessung(page);
+  assert.ok(m.badSek >= 4 * 3600 && m.badSek < 4 * 3600 + 600, `tatsächliche Badzeit ${m.badSek} s`);
+  assert.ok(m.gekochtGesamt >= 4 * 3600, 'Wartezeit bis „Ist raus“ zählt als Badzeit');
+  // Beim Anbraten hält die Pause die Uhr an
+  await vorspulen(page, 1);
+  await page.click('#t-pause');
+  assert.equal(await text(page, '#t-pause'), '▶️ Fortsetzen');
+  const vorher = await text(page, '#h-zeit');
+  await vorspulen(page, 30);
+  assert.equal(await text(page, '#h-zeit'), vorher, 'Anbraten pausiert');
+  await page.click('#t-pause');
+  await vorspulen(page, 100);
+  assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
+  await page.click('#t-neu');
+}
+
+async function sousVideMehrereBaeder(page) {
+  // Liste aus einer früheren Sitzung: Anpassung hat sich geändert → zwei Badtemperaturen
+  await page.evaluate(() => {
+    const st = (id, fleischId, farbeId) => ({ id, name: '', farbeId, fleischId, stufe: 'mediumRare', dicke: 2.5, startId: 'kalt', geraetId: 'pfanne', methode: 'sousvide', tStartGemessen: null });
+    localStorage.setItem('meatagain.teller.v1', JSON.stringify([st('a', 'rumpsteak', 'gruen'), st('b', 'lammkotelett', 'blau')]));
+    localStorage.setItem('meatagain.anpassung.v1', '{}');   // z. B. „Anpassungen zurücksetzen“: Rind MR wieder 54 °C
+  });
+  await page.reload();
+  assert.equal(await page.isVisible('#teller-konflikt'), true);
+  assert.match(await text(page, '#teller-konflikt'), /nur eine Temperatur: Rumpsteak 54 °C, Lammkotelett 56 °C/);
+  assert.equal(await page.isDisabled('#start'), true, 'zwei Badtemperaturen → kein Start');
+  assert.match(await text(page, '#teller-liste'), /max\. 3\u00a0h im Bad/, 'Kürzel auch auf der Liste');
+  assert.match(await text(page, '#teller-risiko'), /ganzen, unbehandelten Stücken/);
+  assert.match(await text(page, '#teller-risiko'), /Toxoplasmose/);
+  await page.click('#teller-liste li:nth-child(2) button');
+  assert.equal(await page.isVisible('#teller-konflikt'), false);
+  assert.equal(await page.isDisabled('#start'), false);
+  await page.click('#teller-leeren');
+  await page.click('#methode-liste button:has-text("Pfanne")');
+}
+
+async function sousVideWiederherstellen(page) {
+  // Läuft früh (Test-Uhr springt beim Neuladen um die Rechenzeit früherer runFor-Aufrufe).
+  // Entrecôte 4 cm medium: fertig ab 3 h 10 min – der Lauf muss auch nach mehr als 3 h wiederkommen.
+  await page.click('text=Entrecôte');
+  await page.click('#methode-liste button:has-text("Sous-vide")');
+  await page.locator('#stufen-liste button').nth(2).click();   // Medium, Bad 58 °C
+  assert.match(await text(page, '#stufen-liste button[aria-pressed="true"]'), /Bad 58 °C/);
+  await setzeDicke(page, 4);
+  await page.click('#start');
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Bad ist warm")');
+  await spaeterOeffnen(page, 3.2);
+  assert.equal(await page.isVisible('#v-timer'), true, 'Sous-vide-Lauf nach 3,2 h wiederhergestellt');
+  assert.match(await text(page, '#h-titel'), /Kann raus|Länger im Bad/);
+  await abbrechen(page);
+  // Hähnchen: viel zu alter Lauf mit offener Kontrollmessung → nicht kommentarlos verwerfen
+  await page.click('text=Hähnchenbrust');
+  await page.click('#start');
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Bad ist warm")');
+  page.dialoge.length = 0;
+  await spaeterOeffnen(page, 30);
+  assert.equal(await page.isVisible('#v-auswahl'), true);
+  assert.match(page.dialoge.join(' | '), /Kontrollmessung/, 'Hinweis auf die fehlende Kontrollmessung');
+  assert.equal(await page.evaluate(() => localStorage.getItem('meatagain.lauf.v1')), null);
   await page.click('#methode-liste button:has-text("Pfanne")');
 }
 
@@ -382,8 +511,8 @@ async function einstellungenUndMessungen(page) {
   const inhalt = fs.readFileSync(await download.path(), 'utf8');
   assert.match(inhalt, /Datum;Uhrzeit;Fleisch/);
   assert.match(inhalt, /Messwartezeit_s/);
-  assert.match(inhalt, /;Sous-vide;72\r\n/, 'Sous-vide-Messung mit Badtemperatur im CSV (letzte Spalte)');
-  assert.match(inhalt, /;Pfanne\/Grill;\r\n/, 'Pfannen-Messung ohne Badtemperatur');
+  assert.match(inhalt, /;Sous-vide;72;\d+;71\r\n/, 'Sous-vide-Messung: Bad, tatsächliche Badzeit, Kontrollmessung');
+  assert.match(inhalt, /;Pfanne\/Grill;;;71\r\n/, 'Pfannen-Messung ohne Bad, mit Kontrollmessung');
   assert.ok(inhalt.trim().split('\r\n').length >= 3, 'mindestens 2 Messungen im CSV');
   await page.click('#v-messungen [data-zurueck]');
   assert.equal(await page.isVisible('#v-auswahl'), true, 'Zurück führt zur Auswahl');
@@ -419,6 +548,7 @@ async function einstellungenUndMessungen(page) {
     if (AUSGABE) process.env.PREFIX = name;
     for (const [titel, fn] of [
       ['Neuladen während des Garens', neuLaden],
+      ['Sous-vide: Wiederherstellen nach mehr als 3 h', sousVideWiederherstellen],
       ['Einzelstück Genuss', einzelStueckGenuss],
       ['Sicherheitsablauf Hähnchen', sicherheitsAblauf],
       ['Doppel-Tipp-Schutz', doppelTipp],
@@ -426,6 +556,8 @@ async function einstellungenUndMessungen(page) {
       ['Mehrere Stücke parallel', mehrereStuecke],
       ['Sous-vide Rind', sousVideRind],
       ['Sous-vide Hähnchen', sousVideHaehnchen],
+      ['Sous-vide: Pause und Höchstzeit', sousVidePauseHoechstzeit],
+      ['Sous-vide: verschiedene Badtemperaturen', sousVideMehrereBaeder],
       ['Einstellungen und Messungen', einstellungenUndMessungen],
     ]) {
       try { await fn(page); console.log(`✅ ${name} · ${titel}`); }

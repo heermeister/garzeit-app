@@ -108,6 +108,10 @@ export const SOUS_VIDE = Object.freeze({
   nachBadSek: 15 * 60,      // Kontrollmessung unter 70 °C → so lange zurück ins Bad
   anbratenSek: 45,          // pro Seite, sehr heiß
   anbratenPflichtUnter: 63, // darunter keimt das Bad die Oberfläche nicht ab → Anbraten aller Seiten Pflicht
+  kulanzSek: 60,            // so viel über der 3-h-Grenze gilt noch nicht als „überschritten“ (Bedienzeit)
+  verwerfenAbSek: 4 * 3600, // ab 4 h unter 55 °C: nicht mehr essen (4-h-Regel: Baldwin, FDA Food Code)
+  messToleranz: 1.5,        // Kontrollmessung höher als Bad + 1,5 °C = Fehleingabe oder Fehlmessung
+  laufPufferSek: 12 * 3600, // ein Sous-vide-Lauf bleibt bis 12 h nach dem geplanten Ende wiederherstellbar
   dicke: Object.freeze({ platte: Object.freeze([1, 6]), zylinder: Object.freeze([2, 9]) }),   // Gültigkeit der Aufheiz-Formel (cm)
 });
 

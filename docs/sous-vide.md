@@ -20,7 +20,11 @@
 | 📏 **Dicke** | Platte (Steak, Kotelett, Hähnchenbrust) 1–6 cm · Zylinder (Filet am Stück, Medaillon) 2–9 cm | Gültigkeitsbereich der Formel. |
 | 🪟 **Zeitfenster** | „fertig ab“ → „ideal bis“ → „höchstens“, mit Uhrzeit und Signal | Danach leidet die Textur (Praxiswerte, Tab. 3). |
 | ⚠️ **Hinweise** | Risikogruppen < 63 °C (wie bisher) · rosa nur mit **ganzen, unbehandelten Stücken** · Lamm: **Toxoplasmose** (Schwangere besser well done) · kein roher Knoblauch, keine Butter/kein Öl im Beutel · sofort essen, kein Vorgaren und Aufbewahren | siehe Abschnitt 2 |
-| 🛁 **Bedienung** | Vorheizen bestätigen, erst dann läuft der Timer (kein verzögerter Start) · alle Beutel gleichzeitig ins Bad, nichts Kaltes nachlegen · im selben Bad nur eine Temperatur | Aufheizphase zählt mit; kalte Beutel kühlen das Bad. |
+| 🛁 **Bedienung** | Vorheizen bestätigen, erst dann läuft der Timer (kein verzögerter Start) · alle Beutel gleichzeitig ins Bad, nichts Kaltes nachlegen · im selben Bad nur eine Temperatur (wird auch beim Start geprüft, weil sich die persönliche Anpassung seit dem Hinzufügen geändert haben kann) | Aufheizphase zählt mit; kalte Beutel kühlen das Bad. |
+| ⏸️ **Pause** | Die Zeit im Bad läuft in der Pause **weiter** (Echtzeit ab „Bad ist warm“). Die Pause hält nur das Anbraten an. | Der Beutel liegt weiter im Wasser – sonst würde die 3-h-Grenze verschoben. |
+| ⛔ **Höchstzeit überschritten** (unter 55 °C, z. B. App im Hintergrund) | Über 3 h: dauerhafte Warnung „sofort scharf anbraten und gleich essen – nicht für Risikogruppen“. **Über 4 h: „bitte nicht mehr essen“.** Die tatsächliche Badzeit wird gespeichert (CSV `Badzeit_tatsaechlich_s`). | 4-Stunden-Regel: Baldwin (< 4 h zwischen 5 und 54,4 °C) und FDA Food Code 3-501.19 (Zeit als einzige Kontrolle: höchstens 4 h, danach verwerfen) |
+| 🌡️ **Plausibilität** | Kontrollmessung über Bad + 1,5 °C wird nicht angenommen („Eingabe und Thermometer prüfen“) | Im Bad kann der Kern nicht heißer werden als das Wasser (Tippfehler wie 57 → 75). |
+| ♻️ **Wiederherstellen** | bis 12 h nach dem geplanten Ende; ist ein Lauf älter und war die Kontrollmessung oder „Raus aus dem Bad“ noch offen, erscheint ein deutlicher Hinweis | Lange Badzeiten dürfen nicht verloren gehen. |
 
 ## 2. Fachliche Grundlage
 
@@ -96,7 +100,7 @@ Modell: Platte 0,053·d² + 1,56·d, Zylinder 0,031·d² + 0,73·d (d in mm, t i
 | Stück | Bad | fertig ab | ideal bis | höchstens |
 |---|---|---|---|---|
 | Rumpsteak 2,5 cm medium rare | 54 °C | 1 h 30 min | 2 h 30 min | 3 h (Sicherheit) |
-| Rumpsteak 4 cm medium rare | 54 °C | – | – | **gesperrt** (bräuchte > 3 h) |
+| Rumpsteak 4 cm medium rare | 54 °C | (3 h 5 min) | – | **gesperrt** (bräuchte > 3 h inkl. 15 min Spielraum) |
 | Rinderfilet-Medaillon 4 cm medium rare | 54 °C | 1 h 40 min | 2 h 30 min | 3 h (Sicherheit) |
 | Entrecôte 4 cm medium | 58 °C | 3 h 10 min | 3 h 25 min | 4 h |
 | Lammkotelett 2,5 cm medium rare | 56 °C | 1 h 35 min | 3 h | 4 h |
@@ -115,4 +119,6 @@ Quellen: Serious Eats/Anova, ChefSteps (Praxis). Hähnchen: Park et al. 2020, PM
 1. **Medium rare Rind bei 54 °C** ist durch die 3-h-Grenze auf etwa 3,5 cm (Platte) begrenzt. Mögliche Alternative wäre ein Bad von 55 °C: Damit entfällt die Grenze, aber das weicht 1 °C von F3 ab. → Aktuell bleibt es bei 54 °C.
 2. **Hähnchen unter 70 °C** (z. B. 60–65 °C mit langer Haltezeit) ist nur denkbar mit Prüfung der Primärtexte (FSIS, FSA, FSAI, BfR) und *Listeria* als Leitkeim, nie für Risikogruppen. → Nicht umgesetzt.
 3. **Vorgaren und Kühllagern (Cook-Chill):** nicht umgesetzt.
-4. **Prüfung an der Primärquelle:** Mit freigeschalteten Hosts (bfr.bund.de, fsis.usda.gov, douglasbaldwin.com) lassen sich die Behördenzahlen und Baldwins Tabellen direkt abgleichen.
+4. **Wortlaut bei überschrittener Höchstzeit** (Abschnitt 1, ⛔): 3–4 h „sofort anbraten, gleich essen, nicht für Risikogruppen“, über 4 h „nicht mehr essen“. → Zur fachlichen Freigabe.
+5. **Medaillons (flacher als breit):** Die Zylinderformel mit der Höhe ist dafür etwas zu optimistisch (Gegenrechnung: Ø 8 cm, Höhe 2–2,5 cm erreicht bei ungünstiger Temperaturleitfähigkeit zur Mindestzeit nur 69,3–69,8 °C; Ø ≤ 6 cm ≥ 4 min Reserve). Bei Schwein fängt die Pflicht-Kontrollmessung das ab. Option: Schalter „Medaillon“, der wie eine Platte (Steak) rechnet – das ist konservativ.
+6. **Prüfung an der Primärquelle:** Mit freigeschalteten Hosts (bfr.bund.de, fsis.usda.gov, douglasbaldwin.com) lassen sich die Behördenzahlen und Baldwins Tabellen direkt abgleichen.

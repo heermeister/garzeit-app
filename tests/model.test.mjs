@@ -279,7 +279,10 @@ test('Sous-vide Rind/Lamm: Bad = Zieltemperatur, unter 55 °C höchstens 3 h –
   assert.equal(p.risiko, true);
   const dick = berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'mediumRare', dicke: 4 });
   assert.equal(dick.machbar, false, '4 cm braucht > 3 h');
-  assert.match(dick.grund, /höchstens 3 h/);
+  assert.match(dick.grund, /höchstens 3\u00a0h/);
+  // Begründung nennt die echte Bedingung (Mindestzeit + 15 min Spielraum) statt widersprüchlicher Zahlen
+  assert.match(dick.grund, /plus 15\u00a0min Spielraum/);
+  assert.match(dick.grund, /Dünner schneiden/);
   const gefroren = berechneSousVide({ fleisch: f('rumpsteak'), stufe: 'rare', dicke: 2, startId: 'gefroren' });
   assert.equal(gefroren.machbar, false);
   // Ab 55 °C keine Sicherheitsgrenze mehr, nur Textur
@@ -296,11 +299,43 @@ test('Sous-vide Rind/Lamm: Bad = Zieltemperatur, unter 55 °C höchstens 3 h –
   assert.match(genussAblauf.find((x) => x.titel === 'Anbraten Seite 1').text, /Pflicht/);
 });
 
-test('fmt und dauer', () => {
+test('fmt und dauer (geschützte Leerzeichen: kein Umbruch mitten in der Dauer)', () => {
   assert.equal(fmt(3725), '1:02:05');
-  assert.equal(dauer(45 * 60), '45 min');
-  assert.equal(dauer(95 * 60), '1 h 35 min');
-  assert.equal(dauer(3 * 3600), '3 h');
+  assert.equal(dauer(45 * 60), '45\u00a0min');
+  assert.equal(dauer(95 * 60), '1\u00a0h\u00a035\u00a0min');
+  assert.equal(dauer(3 * 3600), '3\u00a0h');
+  assert.ok(!/ /.test(dauer(7 * 3600 + 22 * 60)), 'kein normales Leerzeichen');
+});
+
+test('Sous-vide: Bad-Schritte laufen in Echtzeit (imBad), Anbraten nicht', () => {
+  for (const [id, stufe, dicke] of [['rumpsteak', 'mediumRare', 2.5], ['haehnchenbrust', 'sicher', 2.5], ['entrecote', 'medium', 5]]) {
+    const fl = f(id);
+    const s = ablaufSousVide(berechneSousVide({ fleisch: fl, stufe, dicke }), fl);
+    const bad = s.filter((x) => x.typ === 'timer' && x.titel !== 'Anbraten Seite 1' && x.titel !== 'Anbraten Seite 2');
+    assert.ok(bad.length >= 2);
+    for (const x of bad) assert.equal(x.imBad, true, `${id}: ${x.titel} läuft im Bad weiter`);
+    for (const x of s.filter((y) => /Anbraten/.test(y.titel))) assert.ok(!x.imBad, 'Anbraten lässt sich pausieren');
+    const zurueck = s.find((x) => x.art === 'halte')?.neinSchritte[0];
+    if (zurueck) assert.equal(zurueck.imBad, true, '„Zurück ins Bad“ läuft in Echtzeit');
+  }
+});
+
+test('Sous-vide: Zeitfenster-Text widerspricht dem Textur-Hinweis nicht', () => {
+  const fl = f('entrecote');
+  const p = berechneSousVide({ fleisch: fl, stufe: 'medium', dicke: 5 });
+  assert.equal(p.textur, true, '5 cm medium: länger als für die Textur ideal');
+  const kann = ablaufSousVide(p, fl).find((x) => x.titel === 'Kann raus');
+  assert.doesNotMatch(kann.text, /Ohne Qualitätsverlust/);
+  assert.equal(kann.uhr, 'spaetestens');
+  const normal = ablaufSousVide(berechneSousVide({ fleisch: fl, stufe: 'medium', dicke: 3 }), fl).find((x) => x.titel === 'Kann raus');
+  assert.match(normal.text, /Ohne Qualitätsverlust/);
+});
+
+test('CSV: tatsächliche Badzeit und Kontrollmessung als eigene Spalten', () => {
+  const kopf = csv([]).split('\r\n')[0];
+  assert.match(kopf, /;Methode;Bad_C;Badzeit_tatsaechlich_s;Kern_Kontrolle_C$/);
+  const zeile = csv([{ methode: 'Sous-vide', tBad: 54, badSek: 11000, kontrolleGemessen: null }]).split('\r\n')[1];
+  assert.match(zeile, /;Sous-vide;54;11000;$/);
 });
 
 test('fmt', () => {

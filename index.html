@@ -62,7 +62,9 @@
       <div id="stufen-liste" class="chips"></div>
       <p id="anpass-info" class="klein" hidden></p>
       <p id="sicher-info" class="info sicher" hidden>
-        🛡️ Nur „sicher durch“: Kern mindestens <b>70 °C für 2 Minuten</b> (BfR). Die App führt dich durch Herausnehmen bei 72 °C, Haltephase und Kontrollmessung.
+        🛡️ Nur „sicher durch“: Kern mindestens <b>70 °C für 2 Minuten</b> (BfR).
+        <span id="sicher-pfanne">Die App führt dich durch Herausnehmen bei 72 °C, Haltephase und Kontrollmessung.</span>
+        <span id="sicher-sv" hidden>Sous-vide: Bad <b>72 °C</b>, Mindestzeit (nicht überspringbar), danach <b>Kontrollmessung ≥ 70 °C mit Wert</b> – darunter 15 Min. zurück ins Bad.</span>
       </p>
       <p id="risiko-info" class="info warn" hidden>
         ⚠️ Für <b>Schwangere, Kleinkinder, ältere und immungeschwächte Menschen</b> wird mindestens 63 °C empfohlen (USDA-Mindestwert für ganze Stücke).
@@ -103,6 +105,7 @@
         <button id="hinzu" type="button" class="mittel">➕ Hinzufügen</button>
       </div>
       <ul id="teller-liste" class="teller-liste"></ul>
+      <p id="teller-konflikt" class="info warn" role="alert" hidden></p>
       <p id="teller-risiko" class="info warn" hidden></p>
       <div id="teller-plan" class="teller-plan" hidden></div>
       <p id="teller-hinweis" class="klein">Für ein einzelnes Stück einfach direkt starten.</p>

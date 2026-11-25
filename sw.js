@@ -1,6 +1,6 @@
 // Meat again – Service Worker: online immer aktuell, offline (oder bei sehr langsamem Netz) aus dem Cache
 // Bei jeder Veröffentlichung CACHE hochzählen, damit alte und neue Dateien nicht gemischt werden.
-const CACHE = 'meatagain-v4';
+const CACHE = 'meatagain-v5';
 const DATEIEN = [
   './', 'index.html', 'css/styles.css', 'js/app.js', 'js/model.js', 'js/data.js', 'js/speicher.js', 'js/signale.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png',
