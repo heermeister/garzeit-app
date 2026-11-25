@@ -146,6 +146,7 @@ input[type=text], input[type=number], select {
 .stueck { background: var(--fl); border: 1px solid var(--rand); border-left: 8px solid var(--farbe); border-radius: 14px; padding: 12px; box-shadow: var(--schatten); }
 .stueck.wartet-auf-dich { border-color: var(--alarm); border-left-color: var(--farbe); box-shadow: 0 0 0 2px var(--alarm); order: -1; }
 .halte-hinweis { color: var(--sicher); font-weight: 600; }
+.s-warn-zeit { margin: 4px 0 0; color: var(--alarm); }
 .s-warn { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; font-weight: 600; color: var(--alarm); background: color-mix(in srgb, var(--alarm) 12%, transparent); }
 .ton-knopf { margin-top: 8px; border-color: var(--alarm); }
 .stueck.erledigt { opacity: .95; }

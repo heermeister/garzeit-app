@@ -333,9 +333,9 @@ test('Sous-vide: Zeitfenster-Text widerspricht dem Textur-Hinweis nicht', () => 
 
 test('CSV: tatsächliche Badzeit und Kontrollmessung als eigene Spalten', () => {
   const kopf = csv([]).split('\r\n')[0];
-  assert.match(kopf, /;Methode;Bad_C;Badzeit_tatsaechlich_s;Kern_Kontrolle_C$/);
-  const zeile = csv([{ methode: 'Sous-vide', tBad: 54, badSek: 11000, kontrolleGemessen: null }]).split('\r\n')[1];
-  assert.match(zeile, /;Sous-vide;54;11000;$/);
+  assert.match(kopf, /;Methode;Bad_C;Badzeit_tatsaechlich_s;Kern_Kontrolle_C;Verworfen$/);
+  const zeile = csv([{ methode: 'Sous-vide', tBad: 54, badSek: 15000, kontrolleGemessen: null, verworfen: true }]).split('\r\n')[1];
+  assert.match(zeile, /;Sous-vide;54;15000;;ja$/);
 });
 
 test('fmt', () => {

@@ -443,6 +443,7 @@ export const CSV_SPALTEN = [
   ['messwarteSek', 'Messwartezeit_s'], ['ruheSek', 'Plan_Ruhezeit_s'], ['ruheTatsaechlichSek', 'Ruhezeit_tatsaechlich_s'],
   ['zeitstempel', 'Zeitstempel_raus'], ['gesamtEnde', 'Zeitstempel_fertig'], ['aufgeholt', 'Hintergrund_aufgeholt'],
   ['methode', 'Methode'], ['tBad', 'Bad_C'], ['badSek', 'Badzeit_tatsaechlich_s'], ['kontrolleGemessen', 'Kern_Kontrolle_C'],
+  ['verworfen', 'Verworfen'],
 ];
 
 function csvFeld(v) {

@@ -56,3 +56,7 @@ die Steak-Zeiten werden davon also nicht verfälscht.
 
 > Hinweis: Jeder Lauf mit eingetragenem Messwert verbessert den Geräte-Faktor bereits automatisch.
 > Der Export dient der tieferen Auswertung (Dicken-Exponent, Nachgaren), die die App nicht selbst lernt.
+>
+> 🛁 **Sous-vide-Zeilen** (`Methode` = Sous-vide) gehören nicht in diese Auswertung: Dort ist `Kern_nach_Ruhe_C`
+> der Wert beim Servieren (nach dem Anbraten), `Ruhezeit_tatsaechlich_s` die Zeit von „raus“ bis „fertig“
+> (Kontrolle + Anbraten), `Kern_beim_Rausnehmen_C` = `Kern_Kontrolle_C`. Die Nachgar-Auswertung gilt nur für Pfanne/Grill.

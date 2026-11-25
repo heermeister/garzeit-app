@@ -49,18 +49,26 @@ const letzteMessung = async (page) => (await lies(page, 'meatagain.messungen.v1'
  * Simuliert „iOS hat die App im Hintergrund beendet und sie wird X Stunden später geöffnet“:
  * gespeicherten Lauf um X h in die Vergangenheit schieben, weiteres Speichern (pagehide) verhindern, neu laden.
  */
-async function spaeterOeffnen(page, stunden) {
-  await page.evaluate((h) => {
+async function spaeterOeffnen(page, stunden, { altesFormat = false } = {}) {
+  await page.evaluate(([h, alt]) => {
     const k = 'meatagain.lauf.v1';
     const l = JSON.parse(localStorage.getItem(k));
     const d = h * 3600 * 1000;
     const schiebe = (o, felder) => { for (const f of felder) if (Number.isFinite(o[f])) o[f] -= d; };
     schiebe(l, ['gespeichertUm', 'gueltigBis', 'pausiertSeit']);
     for (const st of l.stuecke) schiebe(st, ['endeUm', 'checkSeit', 'badSeit']);
+    if (alt) {
+      // Speicherstand wie vor dem Update: ohne gueltigBis, badSeit und imBad
+      delete l.gueltigBis;
+      for (const st of l.stuecke) {
+        delete st.badSeit;
+        for (const x of st.schritte) { delete x.imBad; for (const y of x.neinSchritte || []) delete y.imBad; }
+      }
+    }
     localStorage.setItem(k, JSON.stringify(l));
     const orig = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, v) { if (key !== k) orig.call(this, key, v); };
-  }, stunden);
+  }, [stunden, altesFormat]);
   await page.reload();
 }
 const shot = async (page, name) => { if (AUSGABE) await page.screenshot({ path: path.join(AUSGABE, `${name}.png`), fullPage: true }); };
@@ -385,16 +393,20 @@ async function sousVideHaehnchen(page) {
   assert.equal(await page.locator('.s-aktion .weiter').count(), 0);
   await springe(page, 15 * 60 + 1);
   // Heißer als das 72-°C-Bad geht nicht → Tippfehler/Fehlmessung, nicht als „Ja“ werten
+  page.dialoge.length = 0;
   await page.fill('.temp-eingabe', '95');
   await page.click('button:has-text("Ja")');
   assert.match(await text(page, '#h-titel'), /Kontrollmessung/, '95 °C im 72-°C-Bad wird nicht angenommen');
   assert.match(await text(page, '#toast'), /heißer als das Bad/);
-  await page.fill('.temp-eingabe', '71');
+  assert.equal(page.dialoge.length, 0, 'unmöglicher Wert: keine Rückfrage, sondern Ablehnung');
+  // Etwas über dem Bad (Stick/Thermometer weichen ab): Rückfrage statt Sackgasse
+  await page.fill('.temp-eingabe', '74');
   await page.click('button:has-text("Ja")');
+  assert.match(page.dialoge.join(' | '), /heißer als das 72/);
   assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1');
   const m = await letzteMessung(page);
-  assert.equal(m.rausGemessen, 71);
-  assert.equal(m.kontrolleGemessen, 71);
+  assert.equal(m.rausGemessen, 74);
+  assert.equal(m.kontrolleGemessen, 74);
   assert.ok(m.badSek > 0, 'tatsächliche Badzeit gespeichert');
   await vorspulen(page, 100);
   assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
@@ -422,14 +434,13 @@ async function sousVidePauseHoechstzeit(page) {
   await springe(page, 3 * 3600 + 120);
   assert.equal(await text(page, '#h-titel'), '🛁 Raus aus dem Bad!', 'nach 3 h raus – nicht später');
   assert.match(await text(page, '.s-warn'), /Sicherheitsgrenze/, 'Überschreitung wird gemeldet');
-  await springe(page, 3600);
-  assert.match(await text(page, '.s-warn'), /nicht mehr essen/, 'über 4 h unter 55 °C');
+  assert.match(await text(page, '.s-warn-zeit'), /3\u00a0h\u00a02\u00a0min/, 'tatsächliche Badzeit getrennt vom Warnsatz');
   await page.click('button:has-text("Ist raus")');
-  assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1');
+  assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1', '3–4 h: sofort anbraten');
   assert.equal(await page.isVisible('.s-warn'), true, 'Warnung bleibt sichtbar');
   const m = await letzteMessung(page);
-  assert.ok(m.badSek >= 4 * 3600 && m.badSek < 4 * 3600 + 600, `tatsächliche Badzeit ${m.badSek} s`);
-  assert.ok(m.gekochtGesamt >= 4 * 3600, 'Wartezeit bis „Ist raus“ zählt als Badzeit');
+  assert.ok(m.badSek >= 3 * 3600 + 120 && m.badSek < 3 * 3600 + 600, `tatsächliche Badzeit ${m.badSek} s`);
+  assert.ok(m.gekochtGesamt >= 3 * 3600 + 120, 'Wartezeit bis „Ist raus“ zählt als Badzeit');
   // Beim Anbraten hält die Pause die Uhr an
   await vorspulen(page, 1);
   await page.click('#t-pause');
@@ -440,6 +451,23 @@ async function sousVidePauseHoechstzeit(page) {
   await page.click('#t-pause');
   await vorspulen(page, 100);
   assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
+  await page.click('#t-neu');
+  // 4 h oder länger unter 55 °C: herausnehmen und entsorgen – kein Anbraten, kein „Guten Appetit“, nichts lernen
+  const anpassungVorher = await lies(page, 'meatagain.anpassung.v1');
+  await page.click('#start');
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Bad ist warm")');
+  await springe(page, 4 * 3600 + 60);
+  assert.equal(await text(page, '#h-titel'), '⛔ Raus & entsorgen!');
+  assert.match(await text(page, '.s-text'), /entsorgen/);
+  assert.match(await text(page, '.s-warn'), /nicht mehr essen/);
+  await page.click('button:has-text("Ist raus")');
+  assert.equal(await text(page, '#h-titel'), '⛔ Bitte entsorgen – nicht essen');
+  assert.equal(await page.locator('button:has-text("zu roh")').count(), 0, 'keine Gargrad-Frage');
+  const weg = await letzteMessung(page);
+  assert.equal(weg.verworfen, true);
+  assert.ok(weg.badSek >= 4 * 3600, `Badzeit ${weg.badSek} s`);
+  assert.deepEqual(await lies(page, 'meatagain.anpassung.v1'), anpassungVorher, 'Anpassung unverändert');
   await page.click('#t-neu');
 }
 
@@ -489,7 +517,41 @@ async function sousVideWiederherstellen(page) {
   assert.equal(await page.isVisible('#v-auswahl'), true);
   assert.match(page.dialoge.join(' | '), /Kontrollmessung/, 'Hinweis auf die fehlende Kontrollmessung');
   assert.equal(await page.evaluate(() => localStorage.getItem('meatagain.lauf.v1')), null);
+  // Bad nie bestätigt (Fleisch blieb im Kühlschrank) → kein „nicht mehr essen“
+  await page.click('text=Rumpsteak');
+  await page.locator('#stufen-liste button').first().click();   // Rare, 50 °C
+  await setzeDicke(page, 2);
+  await page.click('#start');
+  await vorspulen(page, 1);
+  page.dialoge.length = 0;
+  await spaeterOeffnen(page, 30);
+  const meldung = page.dialoge.join(' | ');
+  assert.match(meldung, /nie bestätigt/);
+  assert.doesNotMatch(meldung, /weit überschritten|Kontrollmessung/, 'kein falscher Entsorgen-Hinweis');
+  // Speicherstand von vor dem Update: Bad-Schritte werden nachgerüstet (Pause hält das Bad nicht an)
+  await page.click('#start');
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Bad ist warm")');
+  await vorspulen(page, 600);
+  page.dialoge.length = 0;
+  await spaeterOeffnen(page, 0, { altesFormat: true });
+  assert.equal(await page.isVisible('#v-timer'), true);
+  assert.match(page.dialoge.join(' | '), /aktualisiert/, 'Hinweis bei altem Speicherstand unter 55 °C');
+  assert.match(await text(page, '#h-titel'), /Im Wasserbad|Kann raus/);   // Test-Uhr springt beim Neuladen etwas vor
+  await vorspulen(page, 1);
+  await page.click('#t-pause');
+  assert.match(await text(page, '#toast'), /Wasserbad läuft weiter/, 'alter Lauf: Bad läuft in Echtzeit');
+  // Fertiger Lauf kommt nach 3,5 h nicht wieder (12-h-Puffer nur bei offenem Bad)
+  const ab = sekunden(await text(page, '#h-zeit'));
+  await springe(page, ab + 1);
+  await vorspulen(page, 1);
+  await page.click('button:has-text("Jetzt raus")');
+  await vorspulen(page, 100);
+  assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
+  await spaeterOeffnen(page, 3.5);
+  assert.equal(await page.isVisible('#v-auswahl'), true, 'fertiger Lauf wird nicht wiederhergestellt');
   await page.click('#methode-liste button:has-text("Pfanne")');
+  await setzeDicke(page, 2.5);   // Ausgangslage für die folgenden Szenarien
 }
 
 async function einstellungenUndMessungen(page) {
@@ -511,8 +573,9 @@ async function einstellungenUndMessungen(page) {
   const inhalt = fs.readFileSync(await download.path(), 'utf8');
   assert.match(inhalt, /Datum;Uhrzeit;Fleisch/);
   assert.match(inhalt, /Messwartezeit_s/);
-  assert.match(inhalt, /;Sous-vide;72;\d+;71\r\n/, 'Sous-vide-Messung: Bad, tatsächliche Badzeit, Kontrollmessung');
-  assert.match(inhalt, /;Pfanne\/Grill;;;71\r\n/, 'Pfannen-Messung ohne Bad, mit Kontrollmessung');
+  assert.match(inhalt, /;Sous-vide;72;\d+;74;nein\r\n/, 'Sous-vide-Messung: Bad, tatsächliche Badzeit, Kontrollmessung');
+  assert.match(inhalt, /;Pfanne\/Grill;;;71;\r\n/, 'Pfannen-Messung ohne Bad, mit Kontrollmessung');
+  assert.match(inhalt, /;Sous-vide;50;\d+;;ja\r\n/, 'entsorgtes Stück ist markiert');
   assert.ok(inhalt.trim().split('\r\n').length >= 3, 'mindestens 2 Messungen im CSV');
   await page.click('#v-messungen [data-zurueck]');
   assert.equal(await page.isVisible('#v-auswahl'), true, 'Zurück führt zur Auswahl');
