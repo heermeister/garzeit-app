@@ -32,6 +32,13 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 - [x] Etappe 4 – Geräte-Profile, Mess-Modus, CSV-Export, Kalibrierung
 - [ ] Etappe 5 – Testbraten und Eichung → [`docs/testbraten.md`](docs/testbraten.md)
 
+## Festgelegt (25.11.2026)
+
+- Kalibrierung lernt **nur mit eingetragenem Messwert**.
+- Eigener Gerätefaktor für **Schwein/Geflügel** (reduzierte Hitze), getrennt von Rind/Lamm.
+- Signale standardmäßig **auch im Stummmodus** (laufende Musik pausiert); umschaltbar in ⚙️.
+- Fachliche Entscheidungen F1–F4: [`docs/kerntemperaturen.md`](docs/kerntemperaturen.md).
+
 ## Aufbau
 
 | Datei | Inhalt |
