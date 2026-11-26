@@ -1,0 +1,17 @@
+{
+  "name": "Meat again – Garzeit-Timer",
+  "short_name": "Meat again",
+  "description": "Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b1310",
+  "theme_color": "#1b1310",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

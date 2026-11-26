@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meat again</title>
+  <meta name="description" content="Garzeit-Timer für Fleisch – Schritt für Schritt mit Signalton, auch für mehrere Stücke gleichzeitig.">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbf7f4">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1b1310">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Meat again">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="kopf">
+    <button id="nav-home" type="button" class="logo" aria-label="Zur Auswahl">
+      <span class="logo-titel">🥩 Meat again</span><span class="unter">Garzeit-Timer</span>
+    </button>
+    <nav class="nav">
+      <button id="nav-messungen" type="button" class="nav-knopf" aria-label="Messungen">📊</button>
+      <button id="nav-einstellungen" type="button" class="nav-knopf" aria-label="Einstellungen">⚙️</button>
+    </nav>
+  </header>
+
+  <!-- ═════════ Auswahl ═════════ -->
+  <main id="v-auswahl" class="ansicht">
+    <p id="ios-banner" class="info" hidden>
+      📲 <b>Tipp fürs iPhone:</b> In Safari auf <b>Teilen ⬆️ → „Zum Home-Bildschirm“</b> tippen und die App ab dann von dort starten – am besten gleich: Geräte, Gelerntes und Messungen aus Safari werden nicht in die Home-Screen-App übernommen (bei Bedarf über ⚙️ → Daten sichern mitnehmen).
+    </p>
+    <p id="mess-badge" class="info mess" hidden>🧪 <b>Mess-Modus aktiv</b>: Bitte Temperaturen eintragen, wann immer die App danach fragt.
+      <span id="mess-safari" hidden><br>Safari löscht Daten nach 7 Tagen ohne Besuch – regelmäßig exportieren oder die App installieren.</span></p>
+
+    <section class="block">
+      <h2>1 · Fleisch</h2>
+      <div id="fleisch-liste" class="karten"></div>
+    </section>
+
+    <section class="block">
+      <h2>2 · Garmethode</h2>
+      <div id="methode-liste" class="chips"></div>
+      <p id="sv-info" class="info klein-info" hidden>🛁 <b>Sous-vide:</b> salzen ist in Ordnung, aber <b>kein roher Knoblauch, keine Butter, kein Öl</b> in den Beutel. Vakuumieren oder Luft gut verdrängen, Steaks einlagig. Für 72 °C möglichst vakuumieren – Zipper-Nähte halten Hitze schlechter. Sofort essen, nicht vorgaren und aufbewahren.</p>
+    </section>
+
+    <section class="block">
+      <h2><span>3 · Dicke</span> <span id="dicke-wert" class="wert"></span></h2>
+      <div class="dicke-zeile">
+        <button id="dicke-minus" type="button" class="mini" aria-label="− 0,5 cm dünner">−</button>
+        <input id="dicke" type="range" min="1" max="6" step="0.5" aria-label="Dicke in Zentimetern">
+        <button id="dicke-plus" type="button" class="mini" aria-label="+ 0,5 cm dicker">+</button>
+      </div>
+      <div class="skala"><span id="skala-min">1 cm</span><span id="dicke-form" class="klein-inline"></span><span id="skala-max">6 cm</span></div>
+      <p id="dicke-info" class="info warn" hidden>⚠️ <b>Dickes Stück:</b> Bei direkter Hitze verbrennt leicht die Kruste, bevor der Kern gar ist. Besser indirekt garen oder rückwärts braten (erst sanft, dann scharf). Die Zeit ist hier nur grob geschätzt – das Thermometer entscheidet.</p>
+    </section>
+
+    <section class="block">
+      <h2>4 · Garstufe</h2>
+      <div id="stufen-liste" class="chips"></div>
+      <p id="anpass-info" class="klein" hidden></p>
+      <p id="sicher-info" class="info sicher" hidden>
+        🛡️ Nur „sicher durch“: Kern mindestens <b>70 °C für 2 Minuten</b> (BfR).
+        <span id="sicher-pfanne">Die App führt dich durch Herausnehmen bei 72 °C, Haltephase und Kontrollmessung.</span>
+        <span id="sicher-sv" hidden>Sous-vide: Bad <b>72 °C</b>, Mindestzeit (nicht überspringbar), danach <b>Kontrollmessung ≥ 70 °C mit Wert</b> – darunter 15 Min. zurück ins Bad.</span>
+      </p>
+      <p id="risiko-info" class="info warn" hidden>
+        ⚠️ Für <b>Schwangere, Kleinkinder, ältere und immungeschwächte Menschen</b> wird mindestens 63 °C empfohlen (USDA-Mindestwert für ganze Stücke).
+        <span id="risiko-lamm" hidden><br>🐑 Bei Lamm zusätzlich <b>Toxoplasmose</b>-Risiko – Schwangere besser durchgegart (well done).</span>
+        <span id="risiko-intakt" hidden><br>Rosa nur mit <b>ganzen, unbehandelten Stücken</b> – nicht mit nadeliertem, gespritztem, gerolltem oder zusammengesetztem Fleisch.</span>
+      </p>
+    </section>
+
+    <section class="block">
+      <h2>5 · Ausgangslage</h2>
+      <div id="start-liste" class="chips"></div>
+      <label id="tstart-feld" class="feld" hidden>
+        <span>🌡️ Kerntemperatur vor dem Start <small>(Mess-Modus, optional)</small></span>
+        <input id="tstart" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 6" aria-describedby="tstart-fehler">
+        <small id="tstart-fehler" class="fehler-text" hidden>Bitte einen Wert zwischen −20 und 40 °C eintragen (z. B. 6 oder 6,5).</small>
+      </label>
+      <h3 id="geraet-titel" class="unter-h">Gerät</h3>
+      <div id="geraet-liste" class="chips"></div>
+      <p id="geraet-info" class="info warn" hidden></p>
+    </section>
+
+    <section class="block plan">
+      <p id="plan-hinweis" class="klein oben" hidden>👀 Vorschau der Auswahl oben – kommt erst mit ➕ auf die Liste.</p>
+      <div class="plan-zeile"><span id="l-gar">Garzeit ca.</span><b id="p-gar"></b></div>
+      <div class="plan-zeile"><span id="l-seite">Pro Seite</span><b id="p-seite"></b></div>
+      <div class="plan-zeile"><span id="l-raus">Herausnehmen bei</span><b id="p-raus"></b></div>
+      <div class="plan-zeile"><span id="l-ruhe">Ruhezeit</span><b id="p-ruhe"></b></div>
+      <div class="plan-zeile"><span>Ziel auf dem Teller</span><b id="p-ziel"></b></div>
+      <p id="p-faktor" class="klein" hidden></p>
+      <p id="sv-warn" class="info warn" hidden></p>
+      <p id="p-hinweis" class="klein">Zeiten sind Schätzungen – das Thermometer entscheidet.</p>
+    </section>
+
+    <section class="block teller">
+      <h2><span>6 · Mehrere Stücke? <small class="normal">(optional)</small></span></h2>
+      <div class="name-zeile">
+        <input id="name" type="text" maxlength="14" placeholder="Für wen? z. B. Papa" aria-label="Name für dieses Stück" autocomplete="off">
+        <button id="hinzu" type="button" class="mittel">➕ Hinzufügen</button>
+      </div>
+      <ul id="teller-liste" class="teller-liste"></ul>
+      <p id="teller-konflikt" class="info warn" role="alert" hidden></p>
+      <p id="teller-risiko" class="info warn" hidden></p>
+      <div id="teller-plan" class="teller-plan" hidden></div>
+      <p id="teller-hinweis" class="klein">Für ein einzelnes Stück einfach direkt starten.</p>
+      <button id="teller-leeren" type="button" class="text-knopf" hidden>🗑️ Liste leeren</button>
+    </section>
+
+    <button id="start" type="button" class="gross primaer">▶️ Los!</button>
+    <button id="test-schnell" type="button" class="text-knopf">🔔 Signal testen</button>
+  </main>
+
+  <!-- ═════════ Timer ═════════ -->
+  <main id="v-timer" class="ansicht" hidden>
+    <section id="held" class="held">
+      <p id="h-wer" class="h-wer"></p>
+      <h2 id="h-titel" class="h-titel"></h2>
+      <div id="h-zeit" class="h-zeit" role="timer"></div>
+    </section>
+    <p id="sr-ansage" class="nur-sr" role="status" aria-live="polite"></p>
+    <button id="t-ton" type="button" class="gross ton-knopf" hidden>🔔 Ton wieder aktivieren</button>
+    <p id="t-wake" class="info warn" hidden></p>
+    <div id="stuecke" class="stuecke"></div>
+    <div id="t-steuer" class="zwei">
+      <button id="t-pause" type="button" class="gross">⏸️ Pause</button>
+      <button id="t-abbruch" type="button" class="gross">✖ Abbrechen</button>
+    </div>
+    <button id="t-neu" type="button" class="gross primaer" hidden>↩︎ Neues Essen</button>
+  </main>
+
+  <!-- ═════════ Einstellungen ═════════ -->
+  <main id="v-einstellungen" class="ansicht" hidden>
+    <button type="button" class="text-knopf zurueck" data-zurueck>‹ Zurück</button>
+    <h2 class="seiten-titel">⚙️ Einstellungen</h2>
+
+    <section class="block">
+      <h2>🔔 Signal-Test</h2>
+      <p class="klein">Vor dem ersten Braten testen: Hörst du den Piepton und die Ansage?</p>
+      <button id="test-signal" type="button" class="gross">🔔 Signal jetzt testen</button>
+      <ul id="test-ergebnis" class="status-liste" hidden></ul>
+    </section>
+
+    <section class="block">
+      <h2>🧪 Mess-Modus</h2>
+      <label class="schalter">
+        <input id="opt-mess" type="checkbox">
+        <span>Für Testbraten: fragt die Kerntemperatur vor dem Start, bei jeder Messung und nach der Ruhezeit ab. Alles landet in 📊 Messungen und kann als CSV exportiert werden.</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🔁 Automatisch lernen</h2>
+      <label class="schalter">
+        <input id="opt-lernen" type="checkbox">
+        <span>Wenn du beim Messen die Temperatur einträgst, passt die App die Zeiten für das jeweilige Gerät an – getrennt für Rind/Lamm und für Schwein/Geflügel (andere Hitze).</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🎵 Musik beim Kochen</h2>
+      <label class="schalter">
+        <input id="opt-musik" type="checkbox">
+        <span>Musik nicht unterbrechen. Dann schaltet der <b>Stummschalter</b> die Signale stumm – beim Kochen also Stummschalter aus. Ohne Haken sind die Signale auch im Stummmodus hörbar, laufende Musik wird aber angehalten.</span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h2>🍳 Meine Geräte</h2>
+      <ul id="geraete-liste" class="geraete-liste"></ul>
+      <div class="geraet-neu">
+        <input id="geraet-name" type="text" maxlength="24" placeholder="Name, z. B. Gusseisen groß" aria-label="Name des Geräts" autocomplete="off">
+        <select id="geraet-typ" aria-label="Gerätetyp"></select>
+        <button id="geraet-hinzu" type="button" class="mittel">➕ Anlegen</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>🎚️ Mein Gargrad</h2>
+      <p class="klein">Deine Rückmeldung „zu roh / zu durch“ verschiebt die Zielwerte für Rind und Lamm um je 1 °C (max. ± 4 °C). Schwein und Geflügel bleiben immer bei der Sicherheitsregel.</p>
+      <ul id="anpass-liste" class="status-liste"></ul>
+      <button id="anpass-reset" type="button" class="mittel">↺ Alle zurücksetzen</button>
+    </section>
+
+    <section class="block">
+      <h2>💾 Daten sichern</h2>
+      <p class="klein">Geräte, Gelerntes, Einstellungen und Messungen als Datei sichern – z. B. um sie von Safari in die Home-Screen-App oder auf ein neues iPhone mitzunehmen.</p>
+      <div class="zwei">
+        <button id="d-sichern" type="button" class="mittel">💾 Sichern</button>
+        <button id="d-laden" type="button" class="mittel">📥 Laden</button>
+      </div>
+      <input id="d-datei" type="file" accept=".json,application/json" hidden>
+      <p id="d-status" class="klein"></p>
+    </section>
+
+    <p class="klein mitte">Alle Daten bleiben nur auf diesem Gerät.</p>
+  </main>
+
+  <!-- ═════════ Messungen ═════════ -->
+  <main id="v-messungen" class="ansicht" hidden>
+    <button type="button" class="text-knopf zurueck" data-zurueck>‹ Zurück</button>
+    <h2 class="seiten-titel">📊 Messungen</h2>
+    <p id="m-anzahl" class="klein"></p>
+    <div class="zwei">
+      <button id="m-export" type="button" class="gross primaer">📤 CSV exportieren</button>
+      <button id="m-loeschen" type="button" class="gross">🗑️ Alle löschen</button>
+    </div>
+    <ul id="m-liste" class="m-liste"></ul>
+  </main>
+
+  <button id="laufleiste" type="button" class="laufleiste" hidden></button>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
