@@ -299,6 +299,13 @@ test('Sous-vide Rind/Lamm: Bad = Zieltemperatur, unter 55 °C höchstens 3 h –
   assert.match(genussAblauf.find((x) => x.titel === 'Anbraten Seite 1').text, /Pflicht/);
 });
 
+test('Sous-vide-Schwellen unter 55 °C: Warnung über 3 h, Entsorgen ab 3 h 45 min (4-h-Regel inkl. Vorbereitung)', () => {
+  assert.equal(SOUS_VIDE.kurzMaxSek, 3 * 3600);
+  assert.equal(SOUS_VIDE.verwerfenAbSek, 3 * 3600 + 45 * 60);
+  assert.ok(SOUS_VIDE.kurzMaxSek + SOUS_VIDE.kulanzSek < SOUS_VIDE.verwerfenAbSek, 'zwischen Warnung und Entsorgen bleibt ein Fenster');
+  assert.ok(SOUS_VIDE.verwerfenAbSek <= 4 * 3600 - 15 * 60, 'mindestens 15 min Reserve bis zur 4-h-Regel');
+});
+
 test('fmt und dauer (geschützte Leerzeichen: kein Umbruch mitten in der Dauer)', () => {
   assert.equal(fmt(3725), '1:02:05');
   assert.equal(dauer(45 * 60), '45\u00a0min');

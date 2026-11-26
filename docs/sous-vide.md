@@ -1,7 +1,7 @@
 # 🛁 Meat again – Sous-vide: Regeln und Quellen
 
 > **Status:** umgesetzt am 25.11.2026 als konservativer Standard. Er hält die freigegebenen Regeln F1–F4 ein
-> (siehe `docs/kerntemperaturen.md`). Offene Entscheidungen stehen am Ende.
+> (siehe `docs/kerntemperaturen.md`). Entscheidungen (offen und festgelegt) stehen am Ende.
 >
 > Recherche: vier Themen, jeder Befund adversariell gegengeprüft. Primärstudien wurden über PubMed gelesen.
 > **Einschränkung:** Behördenseiten (bfr.bund.de, fsis.usda.gov, food.gov.uk, fsai.ie) und douglasbaldwin.com
@@ -22,7 +22,7 @@
 | ⚠️ **Hinweise** | Risikogruppen < 63 °C (wie bisher) · rosa nur mit **ganzen, unbehandelten Stücken** · Lamm: **Toxoplasmose** (Schwangere besser well done) · kein roher Knoblauch, keine Butter/kein Öl im Beutel · sofort essen, kein Vorgaren und Aufbewahren | siehe Abschnitt 2 |
 | 🛁 **Bedienung** | Vorheizen bestätigen, erst dann läuft der Timer (kein verzögerter Start) · alle Beutel gleichzeitig ins Bad, nichts Kaltes nachlegen · im selben Bad nur eine Temperatur (wird auch beim Start geprüft, weil sich die persönliche Anpassung seit dem Hinzufügen geändert haben kann) | Aufheizphase zählt mit; kalte Beutel kühlen das Bad. |
 | ⏸️ **Pause** | Die Zeit im Bad läuft in der Pause **weiter** (Echtzeit ab „Bad ist warm“). Die Pause hält nur das Anbraten an. | Der Beutel liegt weiter im Wasser – sonst würde die 3-h-Grenze verschoben. |
-| ⛔ **Höchstzeit überschritten** (unter 55 °C, z. B. App im Hintergrund) | Über 3 h: dauerhafte Warnung und Ansage „sofort scharf anbraten und gleich essen – nicht für Risikogruppen“. **Ab 4 h: „bitte nicht mehr essen – entsorgen“** – der Ablauf endet dann ohne Anbraten mit „Bitte entsorgen“, ohne Gargrad-Frage (nichts wird gelernt). Gezählt wird die Zeit ab „Bad ist warm“. Tatsächliche Badzeit und „Verworfen“ stehen in der Messung (CSV `Badzeit_tatsaechlich_s`, `Verworfen`). | 4-Stunden-Regel: Baldwin (< 4 h zwischen 5 und 54,4 °C) und FDA Food Code 3-501.19 (Zeit als einzige Kontrolle: höchstens 4 h, danach verwerfen) |
+| ⛔ **Höchstzeit überschritten** (unter 55 °C, z. B. App im Hintergrund) | Über 3 h: dauerhafte Warnung und Ansage „sofort scharf anbraten und gleich essen – nicht für Risikogruppen“. **Ab 3 h 45 min: „bitte nicht mehr essen – entsorgen“** – der Ablauf endet dann ohne Anbraten mit „Bitte entsorgen“, ohne Gargrad-Frage (nichts wird gelernt). Gezählt wird die Zeit ab „Bad ist warm“; die 15 min bis 4 h sind die Reserve für Vorbereitung und Anbraten (die 4-h-Regel zählt ab dem Kühlschrank). Tatsächliche Badzeit und „Verworfen“ stehen in der Messung (CSV `Badzeit_tatsaechlich_s`, `Verworfen`). | 4-Stunden-Regel: Baldwin (< 4 h zwischen 5 und 54,4 °C) und FDA Food Code 3-501.19 (Zeit als einzige Kontrolle: höchstens 4 h, danach verwerfen) |
 | 🌡️ **Plausibilität** | Kontrollmessung über Bad + 1,5 °C → Rückfrage („Tippfehler? Stick oder Thermometer weichen ab?“); über Bad + 5 °C → abgelehnt | Im Bad kann der Kern nicht (nennenswert) heißer werden als das Wasser (Tippfehler wie 57 → 75); kleine Abweichungen von Stick und Thermometer sind normal. |
 | ♻️ **Wiederherstellen** | bis 12 h nach dem geplanten Ende, solange Bad, „Raus aus dem Bad“ oder Kontrollmessung offen sind (danach wie Pfanne 3 h); ist ein Lauf älter und war ein Sicherheitsschritt offen, erscheint ein deutlicher Hinweis (unterscheidet „Bad nie bestätigt“) | Lange Badzeiten dürfen nicht verloren gehen. |
 
@@ -114,11 +114,11 @@ Modell: Platte 0,053·d² + 1,56·d, Zylinder 0,031·d² + 0,73·d (d in mm, t i
 
 Quellen: Serious Eats/Anova, ChefSteps (Praxis). Hähnchen: Park et al. 2020, PMID 32475464 – bei 70 °C steigt der Kochverlust von 17 % (1 h) auf 25 % (3 h).
 
-## 4. Offene Entscheidungen (zur Freigabe)
+## 4. Entscheidungen
 
-1. **Medium rare Rind bei 54 °C** ist durch die 3-h-Grenze auf etwa 3,5 cm (Platte) begrenzt. Mögliche Alternative wäre ein Bad von 55 °C: Damit entfällt die Grenze, aber das weicht 1 °C von F3 ab. → Aktuell bleibt es bei 54 °C.
+1. ✅ **Medium rare Rind bei 54 °C** ist durch die 3-h-Grenze auf etwa 3,5 cm (Platte) begrenzt. Die Alternative wäre ein Bad von 55 °C: Damit entfällt die Grenze, aber das weicht 1 °C von F3 ab. → **Festgelegt am 26.11.2026: bleibt bei 54 °C mit 3-h-Grenze.**
 2. **Hähnchen unter 70 °C** (z. B. 60–65 °C mit langer Haltezeit) ist nur denkbar mit Prüfung der Primärtexte (FSIS, FSA, FSAI, BfR) und *Listeria* als Leitkeim, nie für Risikogruppen. → Nicht umgesetzt.
 3. **Vorgaren und Kühllagern (Cook-Chill):** nicht umgesetzt.
-4. **Wortlaut und Schwelle bei überschrittener Höchstzeit** (Abschnitt 1, ⛔): 3–4 h „sofort anbraten, gleich essen, nicht für Risikogruppen“, ab 4 h „nicht mehr essen – entsorgen“. Die App zählt nur die Badzeit; Baldwins < 4 h und die 4-h-Regel des FDA Food Code zählen ab dem Verlassen der Kühlung (inkl. Vorbereitung und Anbraten). Option: ⛔-Schwelle mit Reserve, z. B. 3 h 45 min. → Zur fachlichen Freigabe.
+4. ✅ **Wortlaut und Schwelle bei überschrittener Höchstzeit** (Abschnitt 1, ⛔): Die App zählt nur die Badzeit. Baldwins < 4 h und die 4-h-Regel des FDA Food Code zählen dagegen ab dem Verlassen der Kühlung (inkl. Vorbereitung und Anbraten). → **Festgelegt am 26.11.2026:** über 3 h „sofort anbraten, gleich essen, nicht für Risikogruppen“, **ab 3 h 45 min Badzeit „nicht mehr essen – entsorgen“** (15 min Reserve).
 5. **Medaillons (flacher als breit):** Die Zylinderformel mit der Höhe ist dafür etwas zu optimistisch (Gegenrechnung: Ø 8 cm, Höhe 2–2,5 cm erreicht bei ungünstiger Temperaturleitfähigkeit zur Mindestzeit nur 69,3–69,8 °C; Ø ≤ 6 cm ≥ 4 min Reserve). Bei Schwein fängt die Pflicht-Kontrollmessung das ab. Option: Schalter „Medaillon“, der wie eine Platte (Steak) rechnet – das ist konservativ.
 6. **Prüfung an der Primärquelle:** Mit freigeschalteten Hosts (bfr.bund.de, fsis.usda.gov, douglasbaldwin.com) lassen sich die Behördenzahlen und Baldwins Tabellen direkt abgleichen.

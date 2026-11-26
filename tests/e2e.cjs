@@ -436,7 +436,7 @@ async function sousVidePauseHoechstzeit(page) {
   assert.match(await text(page, '.s-warn'), /Sicherheitsgrenze/, 'Überschreitung wird gemeldet');
   assert.match(await text(page, '.s-warn-zeit'), /3\u00a0h\u00a02\u00a0min/, 'tatsächliche Badzeit getrennt vom Warnsatz');
   await page.click('button:has-text("Ist raus")');
-  assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1', '3–4 h: sofort anbraten');
+  assert.equal(await text(page, '#h-titel'), 'Anbraten Seite 1', '3 h bis 3 h 45 min: sofort anbraten');
   assert.equal(await page.isVisible('.s-warn'), true, 'Warnung bleibt sichtbar');
   const m = await letzteMessung(page);
   assert.ok(m.badSek >= 3 * 3600 + 120 && m.badSek < 3 * 3600 + 600, `tatsächliche Badzeit ${m.badSek} s`);
@@ -452,12 +452,12 @@ async function sousVidePauseHoechstzeit(page) {
   await vorspulen(page, 100);
   assert.equal(await text(page, '#h-titel'), 'Guten Appetit! 🍽️');
   await page.click('#t-neu');
-  // 4 h oder länger unter 55 °C: herausnehmen und entsorgen – kein Anbraten, kein „Guten Appetit“, nichts lernen
+  // Ab 3 h 45 min unter 55 °C (freigegeben 26.11.2026): herausnehmen und entsorgen – kein Anbraten, kein „Guten Appetit“, nichts lernen
   const anpassungVorher = await lies(page, 'meatagain.anpassung.v1');
   await page.click('#start');
   await vorspulen(page, 1);
   await page.click('button:has-text("Bad ist warm")');
-  await springe(page, 4 * 3600 + 60);
+  await springe(page, 3 * 3600 + 46 * 60);
   assert.equal(await text(page, '#h-titel'), '⛔ Raus & entsorgen!');
   assert.match(await text(page, '.s-text'), /entsorgen/);
   assert.match(await text(page, '.s-warn'), /nicht mehr essen/);
@@ -471,7 +471,7 @@ async function sousVidePauseHoechstzeit(page) {
   assert.equal(await page.locator('button:has-text("zu roh")').count(), 0, 'keine Gargrad-Frage');
   const weg = await letzteMessung(page);
   assert.equal(weg.verworfen, true);
-  assert.ok(weg.badSek >= 4 * 3600, `Badzeit ${weg.badSek} s`);
+  assert.ok(weg.badSek >= 3 * 3600 + 45 * 60, `Badzeit ${weg.badSek} s`);
   assert.deepEqual(await lies(page, 'meatagain.anpassung.v1'), anpassungVorher, 'Anpassung unverändert');
   await page.click('#t-neu');
 }

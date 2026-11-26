@@ -34,12 +34,13 @@ Mehrere Stücke mit unterschiedlichen Garstufen werden so **gestaffelt, dass all
 - [x] Sous-vide (Regeln und Quellen → [`docs/sous-vide.md`](docs/sous-vide.md))
 - [ ] Etappe 5 – Testbraten und Eichung → [`docs/testbraten.md`](docs/testbraten.md)
 
-## Festgelegt (25.11.2026)
+## Festgelegt (25. und 26.11.2026)
 
 - Kalibrierung lernt **nur mit eingetragenem Messwert**.
 - Eigener Gerätefaktor für **Schwein/Geflügel** (reduzierte Hitze), getrennt von Rind/Lamm.
 - Signale standardmäßig **auch im Stummmodus** (laufende Musik pausiert); umschaltbar in ⚙️.
 - Fachliche Entscheidungen F1–F4: [`docs/kerntemperaturen.md`](docs/kerntemperaturen.md).
+- Sous-vide (26.11.2026): Medium rare Rind bleibt bei **54 °C** mit 3-h-Grenze; unter 55 °C über 3 h Warnung, **ab 3 h 45 min Badzeit entsorgen** → [`docs/sous-vide.md`](docs/sous-vide.md).
 
 ## Aufbau
 

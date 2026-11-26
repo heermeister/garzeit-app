@@ -109,7 +109,9 @@ export const SOUS_VIDE = Object.freeze({
   anbratenSek: 45,          // pro Seite, sehr heiß
   anbratenPflichtUnter: 63, // darunter keimt das Bad die Oberfläche nicht ab → Anbraten aller Seiten Pflicht
   kulanzSek: 60,            // so viel über der 3-h-Grenze gilt noch nicht als „überschritten“ (Bedienzeit)
-  verwerfenAbSek: 4 * 3600, // ab 4 h unter 55 °C: nicht mehr essen (4-h-Regel: Baldwin, FDA Food Code)
+  // ab 3 h 45 min Badzeit unter 55 °C: nicht mehr essen. Die 4-h-Regel (Baldwin, FDA Food Code) zählt ab dem
+  // Kühlschrank – ca. 15 min für Vorbereitung und Anbraten sind eingerechnet (freigegeben 26.11.2026).
+  verwerfenAbSek: 3 * 3600 + 45 * 60,
   messToleranz: 1.5,        // Kontrollmessung höher als Bad + 1,5 °C → nachfragen (Tippfehler? Stick/Thermometer weichen ab?)
   messUnmoeglichUeber: 5,   // höher als Bad + 5 °C → ablehnen (im Bad physikalisch nicht möglich)
   laufPufferSek: 12 * 3600, // ein Sous-vide-Lauf bleibt bis 12 h nach dem geplanten Ende wiederherstellbar

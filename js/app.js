@@ -664,7 +664,7 @@ function wiederherstellen() {
   lauf.pausiertSeit = l.pausiertSeit || null;
   lauf.letzteErinnerung = Date.now();
   lauf.urteile = l.urteile && typeof l.urteile === 'object' ? l.urteile : {};
-  // Ältere Speicherstände: „Ist raus“ nach 4 h oder mehr unter 55 °C führte noch zum Anbraten → jetzt entsorgen
+  // Ältere Speicherstände: „Ist raus“ nach Überschreiten der Entsorgen-Schwelle führte noch zum Anbraten → jetzt entsorgen
   for (const st of lauf.stuecke) {
     if (st.verworfen || !st.plan?.hartMax || !(st.badSek >= SOUS_VIDE.verwerfenAbSek)) continue;
     st.verworfen = true;
@@ -726,7 +726,7 @@ const badName = (t) => `${komma(t)}\u00a0°C\u2011Bad`;
 
 /**
  * Unter 55 °C: Ist die harte Höchstzeit im Bad überschritten?
- * @returns {null | {stufe: 'warn'|'weg', satz: string, zeit: string}} warn = über 3 h, weg = 4 h oder länger (nicht mehr essen).
+ * @returns {null | {stufe: 'warn'|'weg', satz: string, zeit: string}} warn = über 3 h, weg = ab 3 h 45 min (nicht mehr essen).
  * Der Satz bleibt je Stufe gleich (role=alert wird nur beim Stufenwechsel angesagt); die laufende Dauer steht getrennt.
  */
 function grenzWarnung(st, jetzt = Date.now()) {
@@ -734,14 +734,14 @@ function grenzWarnung(st, jetzt = Date.now()) {
   const sek = badZeitSek(st, jetzt);
   if (sek == null || sek <= SOUS_VIDE.kurzMaxSek + SOUS_VIDE.kulanzSek) return null;
   const weg = sek >= SOUS_VIDE.verwerfenAbSek;
-  // Abrunden passt zur Stufe (⛔ ab sek ≥ 4 h): ⚠️ zeigt höchstens „3 h 59 min“, ⛔ mindestens „4 h“ – wie 📊
+  // Abrunden passt zur Stufe (⛔ ab sek ≥ verwerfenAbSek): ⚠️ zeigt höchstens „3 h 44 min“, ⛔ mindestens „3 h 45 min“ – wie 📊
   const zeit = `🕒 ${dauer(Math.floor(sek / 60) * 60)} im ${badName(st.plan.tBad)}`;
   return weg
-    ? { stufe: 'weg', zeit, satz: `⛔ ${dauer(SOUS_VIDE.verwerfenAbSek)} oder länger unter ${SOUS_VIDE.kurzUnter} °C im Bad. Nach der 4-Stunden-Regel bitte nicht mehr essen – entsorgen.` }
+    ? { stufe: 'weg', zeit, satz: `⛔ ${dauer(SOUS_VIDE.verwerfenAbSek)} oder länger unter ${SOUS_VIDE.kurzUnter} °C im Bad – mit Vorbereitung und Anbraten über der 4-Stunden-Regel. Bitte nicht mehr essen – entsorgen.` }
     : { stufe: 'warn', zeit, satz: `⚠️ Über ${dauer(SOUS_VIDE.kurzMaxSek)} unter ${SOUS_VIDE.kurzUnter} °C im Bad – länger als die Sicherheitsgrenze. Sofort scharf anbraten und gleich essen – nicht für Risikogruppen.` };
 }
 const STUFEN_RANG = { warn: 1, weg: 2 };
-/** „Raus aus dem Bad“ steht an und es sind schon 4 h oder mehr unter 55 °C → entsorgen. */
+/** „Raus aus dem Bad“ steht an und die Entsorgen-Schwelle unter 55 °C ist erreicht → entsorgen. */
 function mussEntsorgt(st, jetzt = Date.now()) {
   return aktSchritt(st).art === 'svraus' && grenzWarnung(st, jetzt)?.stufe === 'weg';
 }
@@ -804,7 +804,7 @@ function ticke() {
     // Sicherheitsansagen zuerst und je Stufe zusammengefasst – lange Sammelansagen schneidet der Sprach-Wachhund ab
     const wer = (namen) => (lauf.stuecke.length > 1 ? `${namen.join(', ')}: ` : '');
     if (grenzNamen.warn.length) ansagen.unshift(`${wer(grenzNamen.warn)}Höchstzeit im Bad überschritten – sofort anbraten, nicht für Risikogruppen.`);
-    if (grenzNamen.weg.length) ansagen.unshift(`${wer(grenzNamen.weg)}Über vier Stunden im Bad – bitte nicht mehr essen.`);
+    if (grenzNamen.weg.length) ansagen.unshift(`${wer(grenzNamen.weg)}Höchstzeit im Bad weit überschritten – bitte nicht mehr essen.`);
     if (ansagen.length) {
       signal(ansagen.join(' '));
       lauf.letzteErinnerung = jetzt;
@@ -923,7 +923,7 @@ function renderTimer() {
     if (w) {
       setText(d.warn, w.satz);
       setText(d.warnZeit, w.zeit);
-      // 4 h oder länger: nicht mehr „sofort anbraten“, sondern herausnehmen und entsorgen
+      // Entsorgen-Schwelle erreicht: nicht mehr „sofort anbraten“, sondern herausnehmen und entsorgen
       if (s.art === 'svraus' && w.stufe === 'weg') {
         setText(d.text, 'Höchstzeit weit überschritten – Beutel herausnehmen und entsorgen. Nicht anbraten, nicht essen.');
         setText(d.danach, '');   // kein „Danach: Anbraten …“
@@ -1166,7 +1166,7 @@ function antworte(st, ja, gemessen, feld = null) {
     }
     st.checkSeit = null;
     if (st.badSek == null) st.badSek = badZeitSek(st, jetzt);   // noch im Schritt „Raus aus dem Bad“
-    // 4 h oder länger unter 55 °C: nicht anbraten, nicht servieren – direkt zum Ende „Bitte entsorgen“
+    // Entsorgen-Schwelle unter 55 °C erreicht: nicht anbraten, nicht servieren – direkt zum Ende „Bitte entsorgen“
     if (grenzWarnung(st, jetzt)?.stufe === 'weg') {
       st.verworfen = true;
       st.idx = st.schritte.findIndex((x) => x.typ === 'fertig') - 1;
